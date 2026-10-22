@@ -92,11 +92,30 @@ describe("settle", () => {
     expect(a.b).toBe(0);
   });
 
-  it("3명 팀이 이기고 4명 팀이 지면: 진 팀이 3+4명분을 4명이 나눈다", () => {
-    const charges = settle(rankTeams([team(1, [250, 250, 250], 250), team(2, [100, 100, 100, 100])]), FEE);
+  it("3명 팀이 이기고 4명 팀이 지면: 진 팀 최고점자는 자기 몫, 나머지 3명이 3+3명분", () => {
+    const charges = settle(rankTeams([team(1, [250, 250, 250], 250), team(2, [130, 100, 100, 100])]), FEE);
     const a = amounts(charges);
-    expect(a.t2m1).toBe(splitAmount(7 * FEE, 4)); // 4,900
+    expect(a.t2m1).toBe(FEE);
+    expect([a.t2m2, a.t2m3, a.t2m4]).toEqual([2 * FEE, 2 * FEE, 2 * FEE]); // 5,600
     expect([a.t1m1, a.t1m2, a.t1m3]).toEqual([0, 0, 0]);
+    expect(charges.find((c) => c.memberId === "t2m1")!.kind).toBe("self");
+  });
+
+  it("2 vs 3에서 3명 팀이 지면: 최고점자(점수+핸디)는 자기 몫, 나머지 2명이 4명분", () => {
+    const winners = team(1, [200, 200], 150);
+    const losers: TeamEntry = {
+      teamNo: 2,
+      handicap: 0,
+      members: [
+        { memberId: "x", score: 160, handicap: 0, groupNo: 1 },
+        { memberId: "y", score: 150, handicap: 12, groupNo: 2 },
+        { memberId: "z", score: 100, handicap: 0, groupNo: 3 },
+      ],
+    };
+    const a = amounts(settle(rankTeams([winners, losers]), FEE));
+    expect(a.y).toBe(FEE); // 150+12 = 162 > 160
+    expect([a.x, a.z]).toEqual([2 * FEE, 2 * FEE]);
+    expect([a.t1m1, a.t1m2]).toEqual([0, 0]);
   });
 
   it("개인전 1v1v1v1: 4등이 1등 몫, 3등이 2등 몫", () => {
