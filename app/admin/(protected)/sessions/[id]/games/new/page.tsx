@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/PageHeader";
+import { StepBar } from "@/components/Flow";
+import { NavBar } from "@/components/PageHeader";
 import { getHandicapTable, listGames } from "@/lib/db/games";
 import { listMembers } from "@/lib/db/members";
 import { getSession } from "@/lib/db/sessions";
@@ -59,18 +60,25 @@ export default async function NewGamePage({ params, searchParams }: PageProps<"/
 
   return (
     <>
-      <PageHeader title={`${gameNo}게임 팀 구성`} back={`/admin/sessions/${id}`} />
+      <NavBar title={`${gameNo}게임 팀 구성`} back={`/admin/sessions/${id}`} backLabel="정모" />
+      <StepBar current="팀 구성" />
       {data.session.closed_at ? (
-        <p className="m-4 rounded-xl bg-background p-4 text-sm text-muted">마감된 정모예요.</p>
+        <p className="mx-5 mt-5 rounded-2xl bg-surface p-4 text-[15px] text-muted">마감된 정모예요.</p>
       ) : people.length < 2 ? (
-        <p className="m-4 rounded-xl bg-background p-4 text-sm text-muted">
+        <p className="mx-5 mt-5 rounded-2xl bg-surface p-4 text-[15px] text-muted">
           참석자가 2명 이상이어야 팀을 나눌 수 있어요.{" "}
-          <Link href={`/admin/sessions/${id}/attendance`} className="font-bold text-brand underline">
+          <Link href={`/admin/sessions/${id}/attendance`} className="text-link">
             참석 체크
           </Link>
         </p>
       ) : (
-        <TeamBuilder sessionId={id} people={people} handicapTable={table} initial={initial} />
+        <TeamBuilder
+          sessionId={id}
+          people={people}
+          handicapTable={table}
+          initial={initial}
+          previousGameId={games.at(-1)?.id}
+        />
       )}
     </>
   );
