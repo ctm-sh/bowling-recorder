@@ -16,12 +16,12 @@ export function FeeForm({
 
   if (!editing) {
     return (
-      <div className="m-4 flex items-center justify-between rounded-2xl border border-line p-4">
-        <div>
-          <p className="text-xs text-muted">1인 1게임 게임비</p>
-          <p className="mt-0.5 text-xl font-bold">{formatWon(fee)}</p>
-        </div>
-        <button onClick={() => setEditing(true)} className="text-sm text-brand underline">
+      <div className="mx-5 mt-4 flex min-h-[52px] items-center gap-2 rounded-2xl bg-surface px-4">
+        <span className="flex-1 text-base">
+          게임비 <span className="text-[13px] text-muted">1인 1게임</span>
+        </span>
+        <span className="text-base">{formatWon(fee)}</span>
+        <button onClick={() => setEditing(true)} className="min-h-11 pl-2 text-[15px] text-link">
           수정
         </button>
       </div>
@@ -29,8 +29,8 @@ export function FeeForm({
   }
 
   return (
-    <form action={formAction} className="m-4 flex flex-col gap-2 rounded-2xl border-2 border-brand p-4">
-      <label className="text-xs text-muted" htmlFor="fee">
+    <form action={formAction} className="mx-5 mt-4 flex flex-col gap-2 rounded-2xl bg-surface p-4 ring-2 ring-accent">
+      <label className="text-[13px] font-semibold text-muted" htmlFor="fee">
         1인 1게임 게임비 (원)
       </label>
       <div className="flex gap-2">
@@ -44,12 +44,12 @@ export function FeeForm({
           required
           autoFocus
           defaultValue={fee}
-          className="h-12 min-w-0 flex-1 rounded-xl border-2 border-line px-3 text-lg font-bold outline-none focus:border-brand"
+          className="h-12 min-w-0 flex-1 rounded-xl border border-edge px-3.5 text-[17px] outline-none focus:border-accent"
         />
-        <button disabled={pending} className="rounded-xl bg-brand px-4 font-bold text-white disabled:opacity-60">
+        <button disabled={pending} className="rounded-full bg-accent px-5 font-semibold text-white disabled:opacity-40">
           저장
         </button>
-        <button type="button" onClick={() => setEditing(false)} className="px-2 text-sm text-muted">
+        <button type="button" onClick={() => setEditing(false)} className="px-2 text-[15px] text-link">
           취소
         </button>
       </div>

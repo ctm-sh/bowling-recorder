@@ -28,9 +28,9 @@ export function DeleteSessionButton({
   }
 
   return (
-    <section className="mx-4 mt-10 rounded-2xl border border-red-200 p-4">
-      <h2 className="text-sm font-bold text-danger">정모 삭제</h2>
-      <p className="mt-1 text-xs text-muted">
+    <section className="mx-5 mt-10 rounded-2xl bg-surface p-4">
+      <h2 className="text-[15px] font-semibold">정모 삭제</h2>
+      <p className="mt-1 text-[13px] text-muted">
         {gameCount > 0
           ? `게임 ${gameCount}개, 점수 ${scoreCount}개, 정산 기록이 모두 지워지고 되돌릴 수 없어요.`
           : "아직 게임이 없는 정모예요. 잘못 만들었다면 지워주세요."}
@@ -39,14 +39,14 @@ export function DeleteSessionButton({
       <button
         onClick={onClick}
         disabled={pending}
-        className={`mt-3 h-11 w-full rounded-xl text-sm font-bold ${
-          armed ? "bg-danger text-white" : "border border-red-200 text-danger"
-        } disabled:opacity-60`}
+        className={`mt-3 h-12 w-full rounded-xl text-[15px] font-semibold ${
+          armed ? "bg-danger text-white" : "bg-fill text-danger"
+        } disabled:opacity-40`}
       >
         {pending ? "삭제 중…" : armed ? "정말 삭제할게요 (한 번 더 누르기)" : "이 정모 삭제"}
       </button>
       {armed && !pending && (
-        <button onClick={() => setArmed(false)} className="mt-2 w-full text-center text-xs text-muted underline">
+        <button onClick={() => setArmed(false)} className="mt-1 min-h-11 w-full text-center text-[15px] text-link">
           취소
         </button>
       )}

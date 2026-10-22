@@ -18,11 +18,11 @@ export function DeleteGameButton({ sessionId, gameId }: { sessionId: string; gam
   }
 
   return (
-    <span className="text-xs">
+    <span className="text-[13px]">
       <button
         onClick={onClick}
         disabled={pending}
-        className={`underline ${armed ? "font-bold text-danger" : "text-muted"}`}
+        className={`min-h-11 ${armed ? "font-semibold text-danger" : "text-muted underline"}`}
       >
         {armed ? "한 번 더 누르면 취소" : "게임 취소"}
       </button>
