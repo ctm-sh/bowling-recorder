@@ -8,10 +8,12 @@ export default async function MyRecordPage() {
   const [meId, members] = await Promise.all([getMeId(), listMembers()]);
   const me = members.find((m) => m.id === meId);
 
+  if (!me) return <WhoAmI members={members.filter((m) => m.active)} />;
+
   return (
     <div className="pb-6">
       <PageHeader title="내 기록" back="/home" />
-      {me ? <MemberProfile member={me} members={members} /> : <WhoAmI members={members.filter((m) => m.active)} />}
+      <MemberProfile member={me} members={members} />
     </div>
   );
 }
