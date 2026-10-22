@@ -42,10 +42,6 @@
   --color-dark-link: var(--dark-link);
   --color-dark-me: var(--dark-me);
   --color-danger: var(--danger);
-  /* 예전 이름 (아직 바꾸지 않은 화면용) */
-  --color-line: var(--separator);
-  --color-brand: var(--accent);
-  --color-brand-soft: var(--accent-soft);
   --font-sans:
     var(--font-inter), var(--font-noto-kr), "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
