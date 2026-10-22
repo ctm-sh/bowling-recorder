@@ -5,7 +5,7 @@ import { listMembers } from "@/lib/db/members";
 import { getSettings } from "@/lib/db/settings";
 import { winRecord } from "@/lib/domain/stats";
 import { googleConfigured, writeTabs } from "./google";
-import { memberRows, scoreRows, settlementRows, type ExportGame } from "./rows";
+import { memberRows, scoreRows, scoreSheetRows, settlementRows, type ExportGame } from "./rows";
 
 type GameRow = {
   game_no: number;
@@ -84,6 +84,7 @@ export async function syncToSheet(): Promise<{ ok: boolean; error?: string }> {
     const nameOf = (id: string) => names.get(id) ?? "?";
 
     await writeTabs(settings.sheet_id, [
+      scoreSheetRows(members, games, legacy),
       scoreRows(games, legacy, nameOf),
       memberRows(
         members.map((m) => {
