@@ -39,5 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# env 템플릿은 커밋 (위 .env* 예외)
 !.env.example
+
+# 회원 개인 기록이 담긴 원본 엑셀
 볼링 점수 기록지.xlsx
