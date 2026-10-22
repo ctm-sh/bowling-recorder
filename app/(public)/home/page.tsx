@@ -23,7 +23,12 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
 
   if (!me) {
     return (
-      <WhoAmI members={members.filter((m) => m.active)} currentId={meId ?? undefined} back="/" backLabel="처음으로" />
+      <WhoAmI
+        members={members.filter((m) => m.active)}
+        currentId={meId ?? undefined}
+        back={meId ? "/home" : "/"}
+        backLabel={meId ? "홈" : "처음으로"}
+      />
     );
   }
 
