@@ -1,6 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { TierBadge } from "@/components/TierBadge";
 import {
   assignGroupsByOrder,
@@ -71,7 +84,7 @@ export function TeamBuilder({
   );
   const [overrides, setOverrides] = useState<Overrides>(() => toOverrides(initial));
   const [copiedFrom, setCopiedFrom] = useState(initial.sourceGameNo);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
   const [editPeople, setEditPeople] = useState(false);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -80,7 +93,6 @@ export function TeamBuilder({
   function lineupChanged() {
     setOverrides({});
     setCopiedFrom(undefined);
-    setSelected(null);
     setError(undefined);
   }
 
@@ -121,14 +133,42 @@ export function TeamBuilder({
     else reshuffle();
   }
 
-  // 랜덤 모드: 두 사람을 차례로 누르면 자리(팀·묶음)를 맞바꾼다
-  function tapMember(id: string) {
-    if (mode !== "random") return;
-    if (!selected) return setSelected(id);
-    if (selected === id) return setSelected(null);
-    const a = slots.find((s) => s.memberId === selected)!;
-    const b = slots.find((s) => s.memberId === id)!;
-    if (a.teamNo === b.teamNo) return setSelected(id);
+  // 휴대폰은 꾹 눌렀다가 끌고(스크롤과 구분), 마우스는 조금 움직이면 바로 끈다
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  function onDragStart(e: DragStartEvent) {
+    setDragging(String(e.active.id));
+    navigator.vibrate?.(10);
+  }
+
+  // 사람 위에 놓으면 둘의 자리를 맞바꾸고, 직접 구성에서는 팀 카드에 놓으면 그 팀으로 옮긴다
+  function onDragEnd(e: DragEndEvent) {
+    setDragging(null);
+    const id = String(e.active.id);
+    const over = e.over ? String(e.over.id) : null;
+    if (!over) return;
+    if (over.startsWith("m:")) swapMembers(id, over.slice(2));
+    else if (over.startsWith("t:") && mode === "manual") {
+      const teamNo = Number(over.slice(2));
+      if (manual[id] !== teamNo) assignManual(id, teamNo);
+    }
+  }
+
+  function swapMembers(aId: string, bId: string) {
+    if (aId === bId) return;
+    if (mode === "manual") {
+      const [ta, tb] = [manual[aId], manual[bId]];
+      if (!ta || !tb || ta === tb) return;
+      setManual((prev) => ({ ...prev, [aId]: tb, [bId]: ta }));
+      return lineupChanged();
+    }
+    const a = slots.find((s) => s.memberId === aId)!;
+    const b = slots.find((s) => s.memberId === bId)!;
+    if (a.teamNo === b.teamNo) return;
     setSlots(
       slots.map((s) =>
         s.memberId === a.memberId
@@ -157,7 +197,10 @@ export function TeamBuilder({
             Array.from({ length: teamCount }, (_, i) => participants.filter((p) => manual[p.id] === i + 1)),
           );
   const problem = finalSlots
-    ? lineupError(finalSlots, participants.map((p) => p.id))
+    ? lineupError(
+        finalSlots,
+        participants.map((p) => p.id),
+      )
     : `${unassigned}명이 아직 팀에 배정되지 않았어요.`;
   const valid = finalSlots && !problem ? finalSlots : null;
   const fillDefaults = valid ? defaultFillScores(valid, participants) : {};
@@ -175,8 +218,7 @@ export function TeamBuilder({
       )
     : {};
   // 마지막 묶음(상대 없던 사람들)은 꼭두각시와 붙는다
-  const puppetGroup =
-    valid && Object.keys(fillDefaults).length > 0 ? Math.max(...valid.map((s) => s.groupNo)) : null;
+  const puppetGroup = valid && Object.keys(fillDefaults).length > 0 ? Math.max(...valid.map((s) => s.groupNo)) : null;
   const puppetSources = valid
     ? valid.filter((s) => s.groupNo === puppetGroup).map((s) => byId.get(s.memberId)!.name)
     : [];
@@ -200,6 +242,8 @@ export function TeamBuilder({
       .map((s) => byId.get(s.memberId)!.name);
     return slot.groupNo === puppetGroup ? [...names, PUPPET] : names;
   }
+
+  const teamOf = (id: string) => teams.find((t) => t.memberSlots.some((s) => s.memberId === id))?.teamNo;
 
   function setOverride(teamNo: number, value: string) {
     setOverrides((prev) => ({ ...prev, [teamNo]: value }));
@@ -298,8 +342,8 @@ export function TeamBuilder({
         </div>
         <p className="mt-2 text-xs text-muted">
           {mode === "random"
-            ? "에버가 비슷한 사람끼리 상대가 돼요. 두 사람을 차례로 누르면 자리를 바꿔요."
-            : "사람마다 팀 번호를 눌러 배정하세요. 상대방은 팀 안 에버 순서대로 정해져요."}
+            ? "에버가 비슷한 사람끼리 상대가 돼요. 사람을 꾹 눌러 다른 팀 사람 위로 끌어다 놓으면 자리를 바꿔요."
+            : "팀 번호를 눌러 배정하거나, 팀 카드의 사람을 꾹 눌러 다른 팀으로 끌어다 놓으세요. 상대방은 팀 안 에버 순서대로 정해져요."}
         </p>
       </section>
 
@@ -335,32 +379,37 @@ export function TeamBuilder({
       )}
 
       {/* 팀 카드 */}
-      <section className="flex flex-col gap-3 px-4 pt-4">
-        {teams.map((t) => {
-          const adjusted = t.override !== undefined && Number(t.override) !== t.netDefault;
-          // 핸디는 받는 팀에만 표시한다 (합의로 바꾼 팀은 계속 표시)
-          const receives = valid && (t.netDefault > 0 || t.override !== undefined);
-          return (
-            <div key={t.teamNo} className="overflow-hidden rounded-2xl border border-line">
-              <div className="flex items-center gap-2 bg-background px-4 py-2.5">
-                <span className="size-3 rounded-full" style={{ background: teamColor(t.teamNo) }} aria-hidden />
-                <span className="font-bold">{t.teamNo}팀</span>
-                <span className="text-xs text-muted">{t.memberSlots.length}명</span>
-              </div>
+      <DndContext
+        id="team-builder"
+        sensors={sensors}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setDragging(null)}
+      >
+        <section className="flex flex-col gap-3 px-4 pt-4">
+          {teams.map((t) => {
+            const adjusted = t.override !== undefined && Number(t.override) !== t.netDefault;
+            // 핸디는 받는 팀에만 표시한다 (합의로 바꾼 팀은 계속 표시)
+            const receives = valid && (t.netDefault > 0 || t.override !== undefined);
+            return (
+              <DropTeam key={t.teamNo} teamNo={t.teamNo} enabled={mode === "manual"}>
+                <div className="flex items-center gap-2 bg-background px-4 py-2.5">
+                  <span className="size-3 rounded-full" style={{ background: teamColor(t.teamNo) }} aria-hidden />
+                  <span className="font-bold">{t.teamNo}팀</span>
+                  <span className="text-xs text-muted">{t.memberSlots.length}명</span>
+                </div>
 
-              <ul>
-                {t.memberSlots.map((s) => {
-                  const p = byId.get(s.memberId)!;
-                  const vs = opponents(s);
-                  const isSelected = selected === s.memberId;
-                  return (
-                    <li key={s.memberId} className="border-t border-line">
-                      <button
-                        onClick={() => tapMember(s.memberId)}
-                        disabled={mode !== "random"}
-                        className={`flex w-full items-center gap-2 px-4 py-2.5 text-left ${
-                          isSelected ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand" : ""
-                        }`}
+                <ul>
+                  {t.memberSlots.map((s) => {
+                    const p = byId.get(s.memberId)!;
+                    const vs = opponents(s);
+                    return (
+                      <DragMember
+                        key={s.memberId}
+                        id={s.memberId}
+                        teamNo={t.teamNo}
+                        dragging={dragging}
+                        byTeam={teamOf}
                       >
                         <TierBadge tier={p.tier} />
                         <span className="font-bold">{p.name}</span>
@@ -373,45 +422,56 @@ export function TeamBuilder({
                         <span className="ml-auto truncate text-xs text-muted">
                           {vs.length > 0 && `vs ${vs.join(", ")}`}
                         </span>
-                      </button>
+                        <span className="text-lg leading-none text-muted/60" aria-hidden>
+                          ⠿
+                        </span>
+                      </DragMember>
+                    );
+                  })}
+                  {t.fillDefault !== null && (
+                    <li className="flex items-center gap-2 border-t border-dashed border-line bg-background/60 px-4 py-2.5">
+                      <span className="text-lg leading-none" aria-hidden>
+                        🎎
+                      </span>
+                      <span className="font-bold">{PUPPET}</span>
+                      <span className="rounded bg-brand-soft px-1.5 text-xs font-bold text-brand">
+                        +{t.fillDefault}
+                      </span>
+                      <span className="ml-auto truncate text-xs text-muted">{puppetSources.join(", ")} 에버</span>
                     </li>
-                  );
-                })}
-                {t.fillDefault !== null && (
-                  <li className="flex items-center gap-2 border-t border-dashed border-line bg-background/60 px-4 py-2.5">
-                    <span className="text-lg leading-none" aria-hidden>
-                      🎎
-                    </span>
-                    <span className="font-bold">{PUPPET}</span>
-                    <span className="rounded bg-brand-soft px-1.5 text-xs font-bold text-brand">+{t.fillDefault}</span>
-                    <span className="ml-auto truncate text-xs text-muted">
-                      {puppetSources.join(", ")} 에버
-                    </span>
-                  </li>
-                )}
-                {t.memberSlots.length === 0 && (
-                  <li className="border-t border-line px-4 py-3 text-sm text-muted">아직 아무도 없어요.</li>
-                )}
-              </ul>
+                  )}
+                  {t.memberSlots.length === 0 && (
+                    <li className="border-t border-line px-4 py-3 text-sm text-muted">아직 아무도 없어요.</li>
+                  )}
+                </ul>
 
-              {receives && (
-                <label className="flex items-center gap-2 border-t border-line px-4 py-3 text-sm">
-                  <span className="font-bold text-brand">받는 핸디</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={t.net}
-                    onChange={(e) => setOverride(t.teamNo, e.target.value)}
-                    className="h-10 w-20 rounded-lg border-2 border-brand text-center text-base font-bold text-brand outline-none"
-                  />
-                  {adjusted && <span className="text-xs font-bold text-brand">합의 조정 (기본 {t.netDefault})</span>}
-                </label>
-              )}
+                {receives && (
+                  <label className="flex items-center gap-2 border-t border-line px-4 py-3 text-sm">
+                    <span className="font-bold text-brand">받는 핸디</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={t.net}
+                      onChange={(e) => setOverride(t.teamNo, e.target.value)}
+                      className="h-10 w-20 rounded-lg border-2 border-brand text-center text-base font-bold text-brand outline-none"
+                    />
+                    {adjusted && <span className="text-xs font-bold text-brand">합의 조정 (기본 {t.netDefault})</span>}
+                  </label>
+                )}
+              </DropTeam>
+            );
+          })}
+        </section>
+        <DragOverlay dropAnimation={null}>
+          {dragging && (
+            <div className="flex items-center gap-2 rounded-xl border-2 border-brand bg-surface px-4 py-2.5 shadow-lg">
+              <TierBadge tier={byId.get(dragging)!.tier} />
+              <span className="font-bold">{byId.get(dragging)!.name}</span>
             </div>
-          );
-        })}
-      </section>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       <div className="fixed inset-x-0 bottom-16 z-20 mx-auto max-w-[480px] border-t border-line bg-surface p-3">
         {(error || problem) && <p className="mb-2 text-sm text-danger">{error ?? problem}</p>}
@@ -435,5 +495,53 @@ export function TeamBuilder({
         </div>
       </div>
     </div>
+  );
+}
+
+/** 팀 카드. 직접 구성에서는 사람을 끌어다 놓을 수 있다 */
+function DropTeam({ teamNo, enabled, children }: { teamNo: number; enabled: boolean; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `t:${teamNo}`, disabled: !enabled });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`overflow-hidden rounded-2xl border ${isOver ? "border-2 border-brand" : "border-line"}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** 끌 수 있고, 다른 팀 사람을 위에 놓으면 자리를 바꾸는 줄 */
+function DragMember({
+  id,
+  teamNo,
+  dragging,
+  byTeam,
+  children,
+}: {
+  id: string;
+  teamNo: number;
+  dragging: string | null;
+  byTeam: (id: string) => number | undefined;
+  children: ReactNode;
+}) {
+  const drag = useDraggable({ id });
+  const drop = useDroppable({ id: `m:${id}` });
+  // 같은 팀끼리는 바꿀 게 없으니 강조하지 않는다
+  const target = drop.isOver && dragging !== null && dragging !== id && byTeam(dragging) !== teamNo;
+  return (
+    <li
+      ref={(node) => {
+        drag.setNodeRef(node);
+        drop.setNodeRef(node);
+      }}
+      {...drag.attributes}
+      {...drag.listeners}
+      className={`flex cursor-grab touch-manipulation items-center gap-2 border-t border-line px-4 py-2.5 select-none [-webkit-touch-callout:none] ${
+        drag.isDragging ? "opacity-30" : ""
+      } ${target ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand" : ""}`}
+    >
+      {children}
+    </li>
   );
 }
