@@ -24,7 +24,7 @@ export function CopyButton({ text, label, className }: { text: string; label: Re
 
   return (
     <button onClick={copy} className={className}>
-      {state === "copied" ? "✓ 복사했어요" : state === "failed" ? "복사 실패 · 길게 눌러 복사" : label}
+      {state === "copied" ? "복사했어요" : state === "failed" ? "복사 실패 · 길게 눌러 복사" : label}
     </button>
   );
 }
