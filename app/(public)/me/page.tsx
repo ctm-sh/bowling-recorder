@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/PageHeader";
 import { listMembers } from "@/lib/db/members";
 import { getMeId } from "@/lib/me";
 import { MemberProfile } from "../MemberProfile";
@@ -12,8 +11,7 @@ export default async function MyRecordPage() {
 
   return (
     <div className="pb-6">
-      <PageHeader title="내 기록" back="/home" />
-      <MemberProfile member={me} members={members} />
+      <MemberProfile member={me} members={members} title="내 기록" />
     </div>
   );
 }
