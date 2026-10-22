@@ -1,19 +1,12 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { listMembers } from "@/lib/db/members";
-import { suggestTier, tierReferences } from "@/lib/domain/tiers";
+import { tierCandidates } from "@/lib/domain/tiers";
 import { MemberList } from "./MemberList";
 
 export default async function AdminMembersPage() {
   const members = await listMembers();
-  const refs = tierReferences(members);
-  const candidates = Object.fromEntries(
-    members
-      .filter((m) => m.active)
-      .map((m) => [m.id, suggestTier(m, refs)] as const)
-      .filter(([, s]) => s.kind !== "none")
-      .map(([id, s]) => [id, s.kind as "up" | "down"]),
-  );
+  const candidates = tierCandidates(members);
 
   return (
     <>

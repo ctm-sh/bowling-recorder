@@ -24,8 +24,7 @@ export function tierReferences(members: TierSample[], minGames = 10): number[] {
 }
 
 export type TierSuggestion =
-  | { kind: "up" | "down"; to: number; threshold: number; recentAvg: number }
-  | { kind: "none" };
+  { kind: "up" | "down"; to: number; threshold: number; recentAvg: number } | { kind: "none" };
 
 /**
  * 승급·강등 후보.
@@ -50,4 +49,18 @@ export function suggestTier(
     if (recentAvg <= threshold) return { kind: "down", to: tier + 1, threshold, recentAvg };
   }
   return { kind: "none" };
+}
+
+/** 활동 회원 중 승급(up)·강등(down) 후보 */
+export function tierCandidates(
+  members: (TierSample & { id: string; recentAvg: number | null; recentGames: number })[],
+) {
+  const refs = tierReferences(members);
+  return Object.fromEntries(
+    members
+      .filter((m) => m.active)
+      .map((m) => [m.id, suggestTier(m, refs)] as const)
+      .filter(([, s]) => s.kind !== "none")
+      .map(([id, s]) => [id, s.kind as "up" | "down"]),
+  );
 }
