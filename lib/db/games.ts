@@ -5,6 +5,7 @@ export type GameTeamMember = {
   member_id: string;
   tier_snapshot: number;
   handicap_snapshot: number;
+  handicap_default: number;
   group_no: number;
 };
 
@@ -31,7 +32,7 @@ export async function listGames(sessionId: string): Promise<Game[]> {
   const { data, error } = await db()
     .from("games")
     .select(
-      "id, game_no, mode, confirmed_at, scores(count), teams(id, team_no, handicap, handicap_default, fill_score, fill_score_default, team_members(member_id, tier_snapshot, handicap_snapshot, group_no))",
+      "id, game_no, mode, confirmed_at, scores(count), teams(id, team_no, handicap, handicap_default, fill_score, fill_score_default, team_members(member_id, tier_snapshot, handicap_snapshot, handicap_default, group_no))",
     )
     .eq("session_id", sessionId)
     .order("game_no");

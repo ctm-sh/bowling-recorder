@@ -22,30 +22,44 @@ export default async function NewGamePage({ params, searchParams }: PageProps<"/
   // "팀 그대로": 이전 게임의 팀·묶음·합의값을 미리 채운다. 아니면 서버에서 첫 랜덤 배정.
   const source = typeof from === "string" ? games.find((g) => g.id === from) : undefined;
   const players = people.map((p) => ({ id: p.id, tier: effectiveTier(p.tier), avg: p.avg }));
-  const initial: BuilderInitial = source ? {
-    mode: source.mode,
-    slots: source.teams.flatMap((t) =>
-      t.team_members.map((m) => ({ memberId: m.member_id, teamNo: t.team_no, groupNo: m.group_no })),
-    ),
-    // 합의 조정했던 순 핸디만 이어받는다
-    overrides: Object.fromEntries(
-      source.teams.filter((t) => t.handicap !== t.handicap_default).map((t) => [t.team_no, t.handicap]),
-    ),
-    sourceGameNo: source.game_no,
-  } : {
-    mode: "random",
-    slots: people.length >= 2 ? assignRandom(players, defaultTeamCount(players.length)) : [],
-    overrides: {},
-  };
+  const initial: BuilderInitial = source
+    ? {
+        mode: source.mode,
+        slots: source.teams.flatMap((t) =>
+          t.team_members.map((m) => ({ memberId: m.member_id, teamNo: t.team_no, groupNo: m.group_no })),
+        ),
+        // 합의 조정했던 순 핸디만 이어받는다
+        overrides: Object.fromEntries(
+          source.teams.filter((t) => t.handicap !== t.handicap_default).map((t) => [t.team_no, t.handicap]),
+        ),
+        // 합의로 바꿨던 개인 핸디·꼭두각시 점수도 이어받는다
+        memberHandicaps: Object.fromEntries(
+          source.teams.flatMap((t) =>
+            t.team_members
+              .filter((m) => m.handicap_snapshot !== m.handicap_default)
+              .map((m) => [m.member_id, m.handicap_snapshot]),
+          ),
+        ),
+        fills: Object.fromEntries(
+          source.teams
+            .filter((t) => t.fill_score !== null && t.fill_score !== t.fill_score_default)
+            .map((t) => [t.team_no, t.fill_score!]),
+        ),
+        sourceGameNo: source.game_no,
+      }
+    : {
+        mode: "random",
+        slots: people.length >= 2 ? assignRandom(players, defaultTeamCount(players.length)) : [],
+        overrides: {},
+        memberHandicaps: {},
+        fills: {},
+      };
 
   const gameNo = (games.at(-1)?.game_no ?? 0) + 1;
 
   return (
     <>
-      <PageHeader
-        title={`${gameNo}게임 팀 구성`}
-        back={`/admin/sessions/${id}`}
-      />
+      <PageHeader title={`${gameNo}게임 팀 구성`} back={`/admin/sessions/${id}`} />
       {data.session.closed_at ? (
         <p className="m-4 rounded-xl bg-background p-4 text-sm text-muted">마감된 정모예요.</p>
       ) : people.length < 2 ? (

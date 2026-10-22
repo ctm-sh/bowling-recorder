@@ -39,6 +39,10 @@ export type BuilderInitial = {
   slots: Slot[];
   /** 팀별 합의 조정한 순 핸디 */
   overrides: Record<number, number>;
+  /** 사람별 합의 조정한 개인 핸디 */
+  memberHandicaps: Record<string, number>;
+  /** 팀별 합의 조정한 꼭두각시 점수 */
+  fills: Record<number, number>;
   /** "팀 그대로"로 불러온 원본 게임 번호 */
   sourceGameNo?: number;
 };
@@ -46,8 +50,15 @@ export type BuilderInitial = {
 /** 팀별 합의 조정한 순 핸디 (입력 중인 문자열). 없으면 기본값을 쓴다. */
 type Overrides = Record<number, string>;
 
-function toOverrides(initial: BuilderInitial): Overrides {
-  return Object.fromEntries(Object.entries(initial.overrides).map(([teamNo, h]) => [teamNo, String(h)]));
+function toStrings<K extends string | number>(values: Record<K, number>): Record<K, string> {
+  return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)])) as Record<K, string>;
+}
+
+/** 개인 핸디·꼭두각시 점수 입력값. 0~300 정수가 아니면 null */
+function parseScore(value: string | undefined) {
+  if (value === undefined || value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 300 ? n : null;
 }
 
 const PUPPET = "꼭두각시";
@@ -92,7 +103,11 @@ export function TeamBuilder({
   );
   // 직접 구성의 세운 순서. 팀 안에서 같은 순번끼리 상대방이 된다.
   const [order, setOrder] = useState<string[]>(() => orderFrom(initialSlots, allPlayers));
-  const [overrides, setOverrides] = useState<Overrides>(() => toOverrides(initial));
+  const [overrides, setOverrides] = useState<Overrides>(() => toStrings(initial.overrides));
+  // 합의로 바꾼 개인 핸디·꼭두각시 점수 (입력 중인 문자열). 없으면 기본값을 쓴다.
+  const [memberEdits, setMemberEdits] = useState<Record<string, string>>(() => toStrings(initial.memberHandicaps));
+  const [fillEdits, setFillEdits] = useState<Record<number, string>>(() => toStrings(initial.fills));
+  const [editHandicaps, setEditHandicaps] = useState(false);
   const [copiedFrom, setCopiedFrom] = useState(initial.sourceGameNo);
   const [dragging, setDragging] = useState<string | null>(null);
   const [editPeople, setEditPeople] = useState(false);
@@ -102,6 +117,8 @@ export function TeamBuilder({
   // 라인업이 바뀌면 합의값은 초기화한다 (기본값이 달라지므로)
   function lineupChanged() {
     setOverrides({});
+    setMemberEdits({});
+    setFillEdits({});
     setCopiedFrom(undefined);
     setError(undefined);
   }
@@ -227,12 +244,16 @@ export function TeamBuilder({
   const given = valid
     ? matchupHandicaps(valid, new Map(participants.map((p) => [p.id, p.tier])), handicapTable)
     : new Map<string, number>();
-  const memberSums = valid ? teamHandicaps(valid, given) : {};
+  // 실제 적용할 개인 핸디·꼭두각시 점수 (합의로 바꾼 값이 있으면 그 값)
+  const personal = new Map([...given].map(([id, h]) => [id, parseScore(memberEdits[id]) ?? h] as const));
+  const fillOf = (teamNo: number) =>
+    fillDefaults[teamNo] === undefined ? null : (parseScore(fillEdits[teamNo]) ?? fillDefaults[teamNo]);
+  const memberSums = valid ? teamHandicaps(valid, personal) : {};
   // 순 핸디: (팀원 핸디 합 + 꼭두각시 점수)를 팀끼리 비교해 가장 적은 팀을 0으로
   const netDefaults: Record<number, number> = valid
     ? netTeamHandicaps(
         Object.fromEntries(
-          Array.from({ length: teamCount }, (_, i) => [i + 1, (memberSums[i + 1] ?? 0) + (fillDefaults[i + 1] ?? 0)]),
+          Array.from({ length: teamCount }, (_, i) => [i + 1, (memberSums[i + 1] ?? 0) + (fillOf(i + 1) ?? 0)]),
         ),
       )
     : {};
@@ -266,6 +287,17 @@ export function TeamBuilder({
     setOverrides((prev) => ({ ...prev, [teamNo]: value }));
   }
 
+  // 개인 핸디·꼭두각시를 바꾸면 순 핸디 기본값이 다시 계산되므로 팀 합의값은 지운다
+  function editMember(id: string, value: string) {
+    setMemberEdits((prev) => ({ ...prev, [id]: value }));
+    setOverrides({});
+  }
+
+  function editFill(teamNo: number, value: string) {
+    setFillEdits((prev) => ({ ...prev, [teamNo]: value }));
+    setOverrides({});
+  }
+
   function confirm() {
     if (!finalSlots || problem) return;
     const payloadTeams: GamePayload["teams"] = [];
@@ -274,10 +306,18 @@ export function TeamBuilder({
       if (!(Number.isInteger(handicap) && handicap >= 0 && handicap <= 1000)) {
         return setError(`${t.teamNo}팀 핸디는 0~1000 사이 숫자로 입력해주세요.`);
       }
-      payloadTeams.push({ teamNo: t.teamNo, handicap });
+      if (t.fillDefault !== null && fillEdits[t.teamNo] !== undefined && parseScore(fillEdits[t.teamNo]) === null) {
+        return setError(`${t.teamNo}팀 꼭두각시 점수는 0~300 사이 숫자로 입력해주세요.`);
+      }
+      payloadTeams.push({ teamNo: t.teamNo, handicap, fill: fillOf(t.teamNo) });
     }
+    const bad = finalSlots.find(
+      (s) => memberEdits[s.memberId] !== undefined && parseScore(memberEdits[s.memberId]) === null,
+    );
+    if (bad) return setError(`${byId.get(bad.memberId)!.name} 핸디는 0~300 사이 숫자로 입력해주세요.`);
+    const members = finalSlots.map((s) => ({ memberId: s.memberId, handicap: personal.get(s.memberId)! }));
     startTransition(async () => {
-      const result = await createGame(sessionId, { mode, slots: finalSlots, teams: payloadTeams });
+      const result = await createGame(sessionId, { mode, slots: finalSlots, teams: payloadTeams, members });
       if (result?.error) setError(result.error);
     });
   }
@@ -404,6 +444,24 @@ export function TeamBuilder({
         onDragCancel={() => setDragging(null)}
       >
         <section className="flex flex-col gap-3 px-4 pt-4">
+          {valid && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted">
+                {editHandicaps
+                  ? "개인 핸디와 꼭두각시 점수를 합의한 값으로 바꾸세요."
+                  : "핸디는 상대방과의 티어 차이로 정해져요."}
+              </span>
+              <button
+                onClick={() => setEditHandicaps(!editHandicaps)}
+                aria-pressed={editHandicaps}
+                className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-bold ${
+                  editHandicaps ? "border-brand bg-brand text-white" : "border-brand text-brand"
+                }`}
+              >
+                {editHandicaps ? "수정 완료" : "✏️ 핸디 수정"}
+              </button>
+            </div>
+          )}
           {teams.map((t) => {
             const adjusted = t.override !== undefined && Number(t.override) !== t.netDefault;
             // 핸디는 받는 팀에만 표시한다 (합의로 바꾼 팀은 계속 표시)
@@ -421,21 +479,28 @@ export function TeamBuilder({
                     const p = byId.get(s.memberId)!;
                     const vs = opponents(s);
                     return (
-                      <DragMember key={s.memberId} id={s.memberId} dragging={dragging}>
+                      <DragMember key={s.memberId} id={s.memberId} dragging={dragging} disabled={editHandicaps}>
                         <TierBadge tier={p.tier} />
                         <span className="font-bold">{p.name}</span>
                         <span className="text-xs text-muted">{p.avg === null ? "기록 없음" : Math.round(p.avg)}</span>
-                        {(given.get(s.memberId) ?? 0) > 0 && (
-                          <span className="rounded bg-brand-soft px-1.5 text-xs font-bold text-brand">
-                            +{given.get(s.memberId)}
-                          </span>
+                        {valid && (
+                          <HandicapValue
+                            value={personal.get(s.memberId)!}
+                            base={given.get(s.memberId)!}
+                            editing={editHandicaps}
+                            input={memberEdits[s.memberId]}
+                            label={`${p.name} 핸디`}
+                            onChange={(v) => editMember(s.memberId, v)}
+                          />
                         )}
                         <span className="ml-auto truncate text-xs text-muted">
                           {vs.length > 0 && `vs ${vs.join(", ")}`}
                         </span>
-                        <span className="text-lg leading-none text-muted/60" aria-hidden>
-                          ⠿
-                        </span>
+                        {!editHandicaps && (
+                          <span className="text-lg leading-none text-muted/60" aria-hidden>
+                            ⠿
+                          </span>
+                        )}
                       </DragMember>
                     );
                   })}
@@ -445,9 +510,14 @@ export function TeamBuilder({
                         🎎
                       </span>
                       <span className="font-bold">{PUPPET}</span>
-                      <span className="rounded bg-brand-soft px-1.5 text-xs font-bold text-brand">
-                        +{t.fillDefault}
-                      </span>
+                      <HandicapValue
+                        value={fillOf(t.teamNo)!}
+                        base={t.fillDefault}
+                        editing={editHandicaps}
+                        input={fillEdits[t.teamNo]}
+                        label={`${t.teamNo}팀 ${PUPPET} 점수`}
+                        onChange={(v) => editFill(t.teamNo, v)}
+                      />
                       <span className="ml-auto truncate text-xs text-muted">{puppetSources.join(", ")} 에버</span>
                     </li>
                   )}
@@ -523,9 +593,20 @@ function DropTeam({ teamNo, enabled, children }: { teamNo: number; enabled: bool
 }
 
 /** 끌 수 있고, 다른 사람을 위에 놓으면 자리를 바꾸는 줄 */
-function DragMember({ id, dragging, children }: { id: string; dragging: string | null; children: ReactNode }) {
-  const drag = useDraggable({ id });
-  const drop = useDroppable({ id: `m:${id}` });
+function DragMember({
+  id,
+  dragging,
+  disabled,
+  children,
+}: {
+  id: string;
+  dragging: string | null;
+  /** 핸디 입력 중에는 끌지 않는다 (입력칸 터치가 끌기로 잡히지 않게) */
+  disabled: boolean;
+  children: ReactNode;
+}) {
+  const drag = useDraggable({ id, disabled });
+  const drop = useDroppable({ id: `m:${id}`, disabled });
   const target = drop.isOver && dragging !== null && dragging !== id;
   return (
     <li
@@ -535,11 +616,60 @@ function DragMember({ id, dragging, children }: { id: string; dragging: string |
       }}
       {...drag.attributes}
       {...drag.listeners}
-      className={`flex cursor-grab touch-manipulation items-center gap-2 border-t border-line px-4 py-2.5 select-none [-webkit-touch-callout:none] ${
+      className={`flex ${disabled ? "" : "cursor-grab"} touch-manipulation items-center gap-2 border-t border-line px-4 py-2.5 select-none [-webkit-touch-callout:none] ${
         drag.isDragging ? "opacity-30" : ""
       } ${target ? "bg-brand-soft outline-2 -outline-offset-2 outline-brand" : ""}`}
     >
       {children}
     </li>
+  );
+}
+
+/** 개인 핸디·꼭두각시 점수. 평소엔 +N 배지, 수정 중에는 입력칸. 합의로 바꾼 값은 기본값을 함께 보여준다. */
+function HandicapValue({
+  value,
+  base,
+  editing,
+  input,
+  label,
+  onChange,
+}: {
+  value: number;
+  base: number;
+  editing: boolean;
+  input: string | undefined;
+  label: string;
+  onChange: (value: string) => void;
+}) {
+  const adjusted = value !== base;
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1">
+        <span className="text-xs font-bold text-brand">+</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={300}
+          aria-label={label}
+          value={input ?? String(base)}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          className="h-9 w-14 rounded-lg border-2 border-brand text-center text-sm font-bold text-brand outline-none"
+        />
+        {adjusted && <span className="text-[11px] text-muted">기본 {base}</span>}
+      </span>
+    );
+  }
+  if (value === 0 && !adjusted) return null;
+  return (
+    <span className="flex items-center gap-1">
+      <span
+        className={`rounded px-1.5 text-xs font-bold ${adjusted ? "bg-brand text-white" : "bg-brand-soft text-brand"}`}
+      >
+        +{value}
+      </span>
+      {adjusted && <span className="text-[11px] text-muted">기본 {base}</span>}
+    </span>
   );
 }

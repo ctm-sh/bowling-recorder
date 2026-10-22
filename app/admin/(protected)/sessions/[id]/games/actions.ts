@@ -17,8 +17,10 @@ import type { Player, Slot } from "@/lib/domain/types";
 export type GamePayload = {
   mode: "random" | "manual";
   slots: Slot[];
-  /** 팀별 순 핸디 (꼭두각시 포함, 합의 조정 반영) */
-  teams: { teamNo: number; handicap: number }[];
+  /** 팀별 순 핸디 (꼭두각시 포함, 합의 조정 반영)와 꼭두각시 점수 (인원이 적은 팀만) */
+  teams: { teamNo: number; handicap: number; fill: number | null }[];
+  /** 사람별 개인 핸디 (합의 조정 반영) */
+  members: { memberId: string; handicap: number }[];
 };
 
 function isInt(n: unknown, min: number, max: number): n is number {
@@ -40,7 +42,10 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
 
   const attendees = await db().from("attendees").select("member_id").eq("session_id", sessionId);
   if (attendees.error) throw attendees.error;
-  const problem = lineupError(slots, attendees.data.map((a) => a.member_id as string));
+  const problem = lineupError(
+    slots,
+    attendees.data.map((a) => a.member_id as string),
+  );
   if (problem) return { error: problem };
 
   const teamCount = Math.max(...slots.map((s) => s.teamNo));
@@ -49,11 +54,27 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
     const v = values.get(t);
     if (!v || !isInt(v.handicap, 0, 1000)) return { error: `${t}팀 핸디는 0~1000 사이 숫자로 입력해주세요.` };
   }
+  const personal = new Map(payload.members.map((m) => [m.memberId, m.handicap]));
+  if (slots.some((s) => !isInt(personal.get(s.memberId), 0, 300))) {
+    return { error: "개인 핸디는 0~300 사이 숫자로 입력해주세요." };
+  }
 
   // 기본값(핸디표·에버)은 서버에서 다시 계산해 스냅샷으로 남긴다
   const [members, stats, table, last] = await Promise.all([
-    db().from("members").select("id, tier").in("id", slots.map((s) => s.memberId)),
-    db().from("member_stats").select("member_id, avg").in("member_id", slots.map((s) => s.memberId)),
+    db()
+      .from("members")
+      .select("id, tier")
+      .in(
+        "id",
+        slots.map((s) => s.memberId),
+      ),
+    db()
+      .from("member_stats")
+      .select("member_id, avg")
+      .in(
+        "member_id",
+        slots.map((s) => s.memberId),
+      ),
     getHandicapTable(),
     db().from("games").select("game_no").eq("session_id", sessionId).order("game_no", { ascending: false }).limit(1),
   ]);
@@ -69,6 +90,12 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
   }));
   const tierById = new Map(players.map((p) => [p.id, p.tier]));
   const fillDefaults = defaultFillScores(slots, players);
+  for (let t = 1; t <= teamCount; t++) {
+    const fill = values.get(t)!.fill;
+    if (fillDefaults[t] === undefined ? fill !== null : !isInt(fill, 0, 300)) {
+      return { error: `${t}팀 꼭두각시 점수는 0~300 사이 숫자로 입력해주세요.` };
+    }
+  }
   // 상대방(같은 묶음)끼리 핸디표 차이만큼 낮은 티어가 받는다
   const given = matchupHandicaps(slots, tierById, table);
   const memberSums = teamHandicaps(slots, given);
@@ -86,7 +113,8 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
     .select("id")
     .single();
   if (game.error) {
-    if (game.error.code === "23505") return { error: "다른 운영진이 방금 게임을 추가했어요. 새로고침 후 다시 시도해주세요." };
+    if (game.error.code === "23505")
+      return { error: "다른 운영진이 방금 게임을 추가했어요. 새로고침 후 다시 시도해주세요." };
     throw game.error;
   }
 
@@ -102,7 +130,7 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
         handicap: v.handicap,
         handicap_default: handicapDefault,
         // 꼭두각시 점수 (순 핸디에 이미 포함, 기록·표시용)
-        fill_score: fillDefault,
+        fill_score: v.fill,
         fill_score_default: fillDefault,
       };
     });
@@ -114,8 +142,9 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
       team_id: teamId.get(s.teamNo)!,
       member_id: s.memberId,
       tier_snapshot: tierById.get(s.memberId)!,
-      // 이 게임에서 상대방과의 티어 차이로 받은 핸디
-      handicap_snapshot: given.get(s.memberId)!,
+      // 이 게임에서 받은 개인 핸디 (기본값은 상대방과의 티어 차이)
+      handicap_snapshot: personal.get(s.memberId)!,
+      handicap_default: given.get(s.memberId)!,
       group_no: s.groupNo,
     }));
     const inserted = await db().from("team_members").insert(memberRows);
