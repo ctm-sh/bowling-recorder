@@ -27,9 +27,9 @@ export const darkSecondaryButton =
 export const textInput =
   "h-12 w-full rounded-xl border border-edge bg-surface px-3.5 text-[17px] text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-accent";
 
-/** 칩(형태 선택, 필터): 높이 40px 캡슐, 선택 시 검정 채움 */
-export function chip(selected: boolean) {
-  return `inline-flex h-10 shrink-0 items-center gap-1 rounded-full px-4 text-[15px] ${
+/** 칩(형태 선택 40px, 필터 36px): 캡슐, 선택 시 검정 채움 */
+export function chip(selected: boolean, size: "md" | "sm" = "md") {
+  return `inline-flex shrink-0 items-center gap-1 rounded-full ${size === "md" ? "h-10 px-4 text-[15px]" : "h-9 px-3.5 text-sm"} ${
     selected ? "bg-foreground font-semibold text-white" : "border border-edge bg-surface text-foreground"
   }`;
 }
