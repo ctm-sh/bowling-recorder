@@ -32,6 +32,9 @@ export function splitAmount(total: number, people: number) {
  * - 아래 팀은 (대신 내는 인원 + 자기 팀 인원) × 게임비를 1/N로 나눠 낸다.
  *   대신 내는 인원 = min(위 팀 인원, 아래 팀 인원)
  * - 위 팀 인원이 더 많으면, 개인 점수+핸디가 낮은 사람부터 남는 인원만큼 자기 몫을 낸다.
+ * - 아래 팀 인원이 더 많으면, 개인 점수+핸디가 높은 사람부터 남는 인원만큼 자기 몫만 내고
+ *   나머지가 (위 팀 인원 + 나머지 인원)분을 나눠 낸다. 예: 2 vs 3에서 3명 팀이 지면 최고점자는 자기 몫,
+ *   남은 2명이 4명분을 낸다.
  * - 짝이 없는 가운데 팀은 각자 자기 몫만 낸다.
  */
 export function settle(ranked: RankedTeam[], fee: number): Charge[] {
@@ -44,10 +47,20 @@ export function settle(ranked: RankedTeam[], fee: number): Charge[] {
     const lower = ordered[k - 1 - i];
     const covered = Math.min(upper.members.length, lower.members.length);
 
-    const perLoser = splitAmount((covered + lower.members.length) * fee, lower.members.length);
-    for (const m of lower.members) {
-      charges.push({ memberId: m.memberId, teamNo: lower.teamNo, amount: perLoser, kind: "loser" });
-    }
+    // 아래 팀 인원이 더 많으면 개인 점수+핸디가 높은 사람부터 남는 인원만큼 자기 몫만 낸다
+    const strongestFirst = [...lower.members].sort((a, b) => b.score + b.handicap - (a.score + a.handicap));
+    const lowerSelf = lower.members.length - covered;
+    const payers = lower.members.length - lowerSelf;
+    const perLoser = splitAmount((covered + payers) * fee, payers);
+    strongestFirst.forEach((m, idx) => {
+      const self = idx < lowerSelf;
+      charges.push({
+        memberId: m.memberId,
+        teamNo: lower.teamNo,
+        amount: self ? fee : perLoser,
+        kind: self ? "self" : "loser",
+      });
+    });
 
     const weakestFirst = [...upper.members].sort(
       (a, b) => a.score + a.handicap - (b.score + b.handicap),
