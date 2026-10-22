@@ -7,8 +7,10 @@ import { getMeId } from "@/lib/me";
 import { AdminEntry } from "./AdminEntry";
 
 // 첫 화면: 회원 / 운영진 입구. 이 기기에서 이름을 이미 골랐다면 바로 회원 홈으로.
-export default async function StartPage() {
-  if (await getMeId()) redirect("/home");
+// 단, 뒤로 가기·처음 화면 링크(?choose=1)로 온 경우에는 첫 화면을 보여준다.
+export default async function StartPage({ searchParams }: PageProps<"/">) {
+  const { choose } = await searchParams;
+  if (!choose && (await getMeId())) redirect("/home");
 
   return (
     <main className="flex min-h-dvh flex-col">

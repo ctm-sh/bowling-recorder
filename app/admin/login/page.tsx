@@ -1,13 +1,13 @@
 import { PageHeader } from "@/components/PageHeader";
-import { TEAM_NAME } from "@/lib/brand";
+import { START_HREF, START_LABEL, TEAM_NAME } from "@/lib/brand";
 import { LoginForm } from "./LoginForm";
 
 export default function AdminLoginPage() {
   return (
     <main className="min-h-dvh">
       <PageHeader
-        back="/"
-        backLabel="처음으로"
+        back={START_HREF}
+        backLabel={START_LABEL}
         eyebrow={TEAM_NAME}
         title="운영진 로그인"
         sub="정모 진행, 팀 구성, 점수 입력은 운영진만 할 수 있어요."

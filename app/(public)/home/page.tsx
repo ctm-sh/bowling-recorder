@@ -11,6 +11,7 @@ import { listSessions } from "@/lib/db/sessions";
 import { getSettings } from "@/lib/db/settings";
 import { winRecord } from "@/lib/domain/stats";
 import { formatAmount, formatDateLong } from "@/lib/format";
+import { START_HREF, START_LABEL } from "@/lib/brand";
 import { getMeId } from "@/lib/me";
 import { WhoAmI } from "../WhoAmI";
 
@@ -26,8 +27,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
       <WhoAmI
         members={members.filter((m) => m.active)}
         currentId={meId ?? undefined}
-        back={meId ? "/home" : "/"}
-        backLabel={meId ? "홈" : "처음으로"}
+        back={START_HREF}
+        backLabel={START_LABEL}
       />
     );
   }

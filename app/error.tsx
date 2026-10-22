@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { START_HREF, START_LABEL } from "@/lib/brand";
 import { primaryButton } from "@/components/ui";
 
 export default function ErrorPage({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
@@ -14,8 +15,8 @@ export default function ErrorPage({ reset }: { error: Error & { digest?: string 
         <button onClick={reset} className={primaryButton}>
           다시 시도
         </button>
-        <Link href="/" className="flex min-h-11 items-center text-[15px] text-link">
-          처음으로
+        <Link href={START_HREF} className="flex min-h-11 items-center text-[15px] text-link">
+          {START_LABEL}
         </Link>
       </div>
     </main>
