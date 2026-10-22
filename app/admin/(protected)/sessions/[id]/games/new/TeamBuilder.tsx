@@ -16,7 +16,7 @@ import {
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { TierBadge } from "@/components/TierBadge";
 import {
-  assignGroupsByOrder,
+  assignGroupsInOrder,
   assignRandom,
   defaultFillScores,
   effectiveTier,
@@ -24,6 +24,7 @@ import {
   lineupError,
   matchupHandicaps,
   netTeamHandicaps,
+  sortByAvg,
   teamHandicaps,
 } from "@/lib/domain/teams";
 import type { HandicapTable, Player, Slot } from "@/lib/domain/types";
@@ -50,6 +51,13 @@ function toOverrides(initial: BuilderInitial): Overrides {
 }
 
 const PUPPET = "꼭두각시";
+
+/** 라인업의 묶음 순서대로 세운 줄 (직접 구성에서 팀 안 순번 = 상대방 순번) */
+function orderFrom(slots: Slot[], everyone: Player[]) {
+  const ids = [...slots].sort((a, b) => a.groupNo - b.groupNo || a.teamNo - b.teamNo).map((s) => s.memberId);
+  const placed = new Set(ids);
+  return [...ids, ...sortByAvg(everyone.filter((p) => !placed.has(p.id))).map((p) => p.id)];
+}
 
 export function TeamBuilder({
   sessionId,
@@ -82,6 +90,8 @@ export function TeamBuilder({
   const [manual, setManual] = useState<Record<string, number>>(() =>
     Object.fromEntries(initialSlots.map((s) => [s.memberId, s.teamNo])),
   );
+  // 직접 구성의 세운 순서. 팀 안에서 같은 순번끼리 상대방이 된다.
+  const [order, setOrder] = useState<string[]>(() => orderFrom(initialSlots, allPlayers));
   const [overrides, setOverrides] = useState<Overrides>(() => toOverrides(initial));
   const [copiedFrom, setCopiedFrom] = useState(initial.sourceGameNo);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -129,8 +139,11 @@ export function TeamBuilder({
   function changeMode(next: "random" | "manual") {
     if (next === mode) return;
     setMode(next);
-    if (next === "manual") setManual(Object.fromEntries(slots.map((s) => [s.memberId, s.teamNo])));
-    else reshuffle();
+    if (next === "manual") {
+      // 지금 보이는 상대방 그대로 직접 구성으로 넘어간다
+      setManual(Object.fromEntries(slots.map((s) => [s.memberId, s.teamNo])));
+      setOrder(orderFrom(slots, allPlayers));
+    } else reshuffle();
   }
 
   // 휴대폰은 꾹 눌렀다가 끌고(스크롤과 구분), 마우스는 조금 움직이면 바로 끈다
@@ -145,7 +158,7 @@ export function TeamBuilder({
     navigator.vibrate?.(10);
   }
 
-  // 사람 위에 놓으면 둘의 자리를 맞바꾸고, 직접 구성에서는 팀 카드에 놓으면 그 팀으로 옮긴다
+  // 사람 위에 놓으면 둘의 자리를 맞바꾸고(같은 팀이면 순번 = 상대방이 바뀐다), 직접 구성에서는 팀 카드에 놓으면 그 팀으로 옮긴다
   function onDragEnd(e: DragEndEvent) {
     setDragging(null);
     const id = String(e.active.id);
@@ -162,13 +175,13 @@ export function TeamBuilder({
     if (aId === bId) return;
     if (mode === "manual") {
       const [ta, tb] = [manual[aId], manual[bId]];
-      if (!ta || !tb || ta === tb) return;
+      if (!ta || !tb) return;
       setManual((prev) => ({ ...prev, [aId]: tb, [bId]: ta }));
+      setOrder((prev) => prev.map((id) => (id === aId ? bId : id === bId ? aId : id)));
       return lineupChanged();
     }
     const a = slots.find((s) => s.memberId === aId)!;
     const b = slots.find((s) => s.memberId === bId)!;
-    if (a.teamNo === b.teamNo) return;
     setSlots(
       slots.map((s) =>
         s.memberId === a.memberId
@@ -186,6 +199,14 @@ export function TeamBuilder({
     lineupChanged();
   }
 
+  // 직접 구성: 팀마다 세운 순서대로
+  const position = new Map(order.map((id, i) => [id, i]));
+  const manualTeam = (teamNo: number) =>
+    participants
+      .filter((p) => manual[p.id] === teamNo)
+      .map((p) => p.id)
+      .sort((a, b) => position.get(a)! - position.get(b)!);
+
   // 확정에 쓸 최종 라인업 (직접 구성은 모두 배정돼야 만들어진다)
   const unassigned = participants.filter((p) => !manual[p.id]).length;
   const finalSlots: Slot[] | null =
@@ -193,9 +214,7 @@ export function TeamBuilder({
       ? slots
       : unassigned > 0
         ? null
-        : assignGroupsByOrder(
-            Array.from({ length: teamCount }, (_, i) => participants.filter((p) => manual[p.id] === i + 1)),
-          );
+        : assignGroupsInOrder(Array.from({ length: teamCount }, (_, i) => manualTeam(i + 1)));
   const problem = finalSlots
     ? lineupError(
         finalSlots,
@@ -227,7 +246,7 @@ export function TeamBuilder({
     const teamNo = i + 1;
     const memberSlots: Slot[] = finalSlots
       ? finalSlots.filter((s) => s.teamNo === teamNo).sort((a, b) => a.groupNo - b.groupNo)
-      : participants.filter((p) => manual[p.id] === teamNo).map((p) => ({ memberId: p.id, teamNo, groupNo: 0 }));
+      : manualTeam(teamNo).map((memberId) => ({ memberId, teamNo, groupNo: 0 }));
     const netDefault = netDefaults[teamNo] ?? 0;
     const fillDefault = fillDefaults[teamNo] ?? null;
     const override = overrides[teamNo];
@@ -242,8 +261,6 @@ export function TeamBuilder({
       .map((s) => byId.get(s.memberId)!.name);
     return slot.groupNo === puppetGroup ? [...names, PUPPET] : names;
   }
-
-  const teamOf = (id: string) => teams.find((t) => t.memberSlots.some((s) => s.memberId === id))?.teamNo;
 
   function setOverride(teamNo: number, value: string) {
     setOverrides((prev) => ({ ...prev, [teamNo]: value }));
@@ -342,8 +359,8 @@ export function TeamBuilder({
         </div>
         <p className="mt-2 text-xs text-muted">
           {mode === "random"
-            ? "에버가 비슷한 사람끼리 상대가 돼요. 사람을 꾹 눌러 다른 팀 사람 위로 끌어다 놓으면 자리를 바꿔요."
-            : "팀 번호를 눌러 배정하거나, 팀 카드의 사람을 꾹 눌러 다른 팀으로 끌어다 놓으세요. 상대방은 팀 안 에버 순서대로 정해져요."}
+            ? "에버가 비슷한 사람끼리 상대가 돼요. 사람을 꾹 눌러 다른 사람 위로 끌어다 놓으면 자리를 바꿔요. 같은 팀 안에서 순서를 바꾸면 상대방이 바뀌어요."
+            : "팀 번호를 눌러 배정하거나, 팀 카드의 사람을 꾹 눌러 끌어다 놓으세요. 팀 안에서 같은 순번끼리 상대방이에요. 순서를 바꾸면 상대방이 바뀌어요."}
         </p>
       </section>
 
@@ -404,13 +421,7 @@ export function TeamBuilder({
                     const p = byId.get(s.memberId)!;
                     const vs = opponents(s);
                     return (
-                      <DragMember
-                        key={s.memberId}
-                        id={s.memberId}
-                        teamNo={t.teamNo}
-                        dragging={dragging}
-                        byTeam={teamOf}
-                      >
+                      <DragMember key={s.memberId} id={s.memberId} dragging={dragging}>
                         <TierBadge tier={p.tier} />
                         <span className="font-bold">{p.name}</span>
                         <span className="text-xs text-muted">{p.avg === null ? "기록 없음" : Math.round(p.avg)}</span>
@@ -511,24 +522,11 @@ function DropTeam({ teamNo, enabled, children }: { teamNo: number; enabled: bool
   );
 }
 
-/** 끌 수 있고, 다른 팀 사람을 위에 놓으면 자리를 바꾸는 줄 */
-function DragMember({
-  id,
-  teamNo,
-  dragging,
-  byTeam,
-  children,
-}: {
-  id: string;
-  teamNo: number;
-  dragging: string | null;
-  byTeam: (id: string) => number | undefined;
-  children: ReactNode;
-}) {
+/** 끌 수 있고, 다른 사람을 위에 놓으면 자리를 바꾸는 줄 */
+function DragMember({ id, dragging, children }: { id: string; dragging: string | null; children: ReactNode }) {
   const drag = useDraggable({ id });
   const drop = useDroppable({ id: `m:${id}` });
-  // 같은 팀끼리는 바꿀 게 없으니 강조하지 않는다
-  const target = drop.isOver && dragging !== null && dragging !== id && byTeam(dragging) !== teamNo;
+  const target = drop.isOver && dragging !== null && dragging !== id;
   return (
     <li
       ref={(node) => {

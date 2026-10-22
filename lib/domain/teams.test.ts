@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assignGroupsByOrder,
+  assignGroupsInOrder,
   assignRandom,
   defaultFillScores,
   effectiveTier,
@@ -174,6 +175,18 @@ describe("assignGroupsByOrder (직접 구성)", () => {
     expect(group(a3.id)).toBe(group(b3.id)); // 170 vs 175
     expect(group(a4.id)).toBe(group(b2.id)); // 160 vs 140
     expect(group(a1.id)).toBe(4); // 150은 상대 없음
+  });
+});
+
+describe("assignGroupsInOrder (순서를 직접 바꾼 경우)", () => {
+  it("세운 순서 그대로 같은 순번끼리 상대방", () => {
+    expect(assignGroupsInOrder([["a", "b"], ["c", "d", "e"]])).toEqual([
+      { memberId: "a", teamNo: 1, groupNo: 1 },
+      { memberId: "b", teamNo: 1, groupNo: 2 },
+      { memberId: "c", teamNo: 2, groupNo: 1 },
+      { memberId: "d", teamNo: 2, groupNo: 2 },
+      { memberId: "e", teamNo: 2, groupNo: 3 },
+    ]);
   });
 });
 

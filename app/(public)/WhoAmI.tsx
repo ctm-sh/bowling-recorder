@@ -101,22 +101,3 @@ export function WhoAmI({ members }: { members: Pickable[] }) {
     </div>
   );
 }
-
-export function ChangeMe({ label = "내가 아니에요" }: { label?: string }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  return (
-    <button
-      onClick={() =>
-        startTransition(async () => {
-          await setMe(null);
-          router.refresh();
-        })
-      }
-      disabled={pending}
-      className="text-sm text-muted underline"
-    >
-      {label}
-    </button>
-  );
-}

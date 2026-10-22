@@ -7,7 +7,7 @@ import { getSessionResults } from "@/lib/db/results";
 import { listSessions } from "@/lib/db/sessions";
 import { formatDate, formatWon } from "@/lib/format";
 import { getMeId } from "@/lib/me";
-import { ChangeMe, WhoAmI } from "../WhoAmI";
+import { WhoAmI } from "../WhoAmI";
 
 const MENU = [
   { href: "/results", icon: "🎳", title: "결과", desc: "정모별 게임 결과·정산" },
@@ -52,7 +52,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
 
   return (
     <div className="pb-6">
-      <PageHeader title={`🎳 ${TEAM_NAME}`} back="/" action={<ChangeMe />} />
+      {/* 뒤로 가기 = 이름 고르기 화면 (다른 이름으로 바꿀 때도 여기서) */}
+      <PageHeader title={`🎳 ${TEAM_NAME}`} back="/home?pick=1" />
 
       <div className="mx-4 mt-5 flex items-center gap-2">
         <TierBadge tier={me.tier} />

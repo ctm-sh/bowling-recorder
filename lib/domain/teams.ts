@@ -109,11 +109,19 @@ export function assignRandom(players: Player[], teamCount: number, rng: Rng = Ma
   return slots;
 }
 
+/** 에버 높은 순으로 정렬 (기록 없으면 티어로 추정한 에버) */
+export function sortByAvg(players: Player[]): Player[] {
+  return [...players].sort(byAvgDesc);
+}
+
+/** 각 팀에 세운 순서 그대로 같은 순번끼리 같은 묶음(상대방)으로 지정한다. */
+export function assignGroupsInOrder(teams: string[][]): Slot[] {
+  return teams.flatMap((ids, t) => ids.map((memberId, i) => ({ memberId, teamNo: t + 1, groupNo: i + 1 })));
+}
+
 /** 직접 구성: 각 팀을 에버 순으로 세워 같은 순번끼리 같은 묶음(상대방)으로 지정한다. */
 export function assignGroupsByOrder(teams: Player[][]): Slot[] {
-  return teams.flatMap((members, t) =>
-    [...members].sort(byAvgDesc).map((p, i) => ({ memberId: p.id, teamNo: t + 1, groupNo: i + 1 })),
-  );
+  return assignGroupsInOrder(teams.map((members) => sortByAvg(members).map((p) => p.id)));
 }
 
 /**
