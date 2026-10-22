@@ -1,19 +1,20 @@
 import { notFound } from "next/navigation";
-import { GameBoard } from "@/components/GameBoard";
-import { PageHeader } from "@/components/PageHeader";
+import { ChargeSummary, Scoreboard, ScoreTable, TeamCards } from "@/components/GameResult";
+import { Empty, PageHeader } from "@/components/PageHeader";
+import { Segmented, SectionTitle } from "@/components/ui";
 import { listMembers } from "@/lib/db/members";
 import { getSessionResults } from "@/lib/db/results";
 import { getSession } from "@/lib/db/sessions";
 import { totalsByMember } from "@/lib/domain/settlement";
-import { formatDate, formatWon } from "@/lib/format";
+import { formatAmount, formatDateLong } from "@/lib/format";
 import { getMeId } from "@/lib/me";
-import { teamColor } from "@/lib/teamColors";
 
-export default async function SessionResultPage({ params }: PageProps<"/results/[id]">) {
+export default async function SessionResultPage({ params, searchParams }: PageProps<"/results/[id]">) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const data = await getSession(id);
   if (!data) notFound();
-  const { session } = data;
+  const { session, attendeeIds } = data;
   const [results, members, meId] = await Promise.all([
     getSessionResults(id, session.fee_per_game),
     listMembers(),
@@ -24,101 +25,106 @@ export default async function SessionResultPage({ params }: PageProps<"/results/
   const nameOf = (m: string) => names.get(m) ?? "?";
   const done = results.filter((r) => r.complete);
   const totals = totalsByMember(done.map((r) => ({ gameNo: r.game.game_no, ranked: r.ranked, charges: r.charges })));
+  // 사람별 게임마다 낸 금액 (정산 탭의 "게임별" 줄)
+  const perGame = (memberId: string) =>
+    done.map((r) => formatAmount(r.charges.find((c) => c.memberId === memberId)?.amount ?? 0)).join(" · ");
 
-  // 전체 점수표: 사람 × 게임 (팀 색으로 표시)
-  const players = [...new Set(results.flatMap((r) => r.game.teams.flatMap((t) => t.team_members.map((m) => m.member_id))))];
-  const cell = (memberId: string, r: (typeof results)[number]) => {
-    const team = r.game.teams.find((t) => t.team_members.some((m) => m.member_id === memberId));
-    return team ? { score: r.scores[memberId], teamNo: team.team_no } : null;
-  };
-  const playerRows = players
-    .map((p) => {
-      const scores = results.map((r) => r.scores[p]).filter((s) => s !== undefined);
-      return { id: p, avg: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0 };
-    })
-    .sort((a, b) => b.avg - a.avg);
+  // 탭: 게임 번호 또는 정산. 기본은 첫 게임.
+  const selected = tab === "settle" ? "settle" : (results.find((r) => String(r.game.game_no) === tab) ?? results[0]);
+  const options = [
+    ...results.map((r) => ({
+      key: String(r.game.game_no),
+      label: `${r.game.game_no}게임`,
+      href: `?tab=${r.game.game_no}`,
+    })),
+    { key: "settle", label: "정산", href: "?tab=settle" },
+  ];
+  const me = meId ?? undefined;
 
   return (
-    <div className="pb-6">
+    <div className="screen-dark min-h-dvh bg-black pb-6 text-white">
       <PageHeader
-        title={`${formatDate(session.date)} 결과`}
+        dark
         back="/results"
+        backLabel="정모 목록"
+        topRight={<span className="text-xs text-dark-muted">조회 전용</span>}
+        title={`${formatDateLong(session.date).split(" (")[0]} 정모`}
+        sub={`${attendeeIds.length}명 · ${results.length}게임 · 1인 1게임 ${formatAmount(session.fee_per_game)}원`}
       />
 
-      {results.map((r) => (
-        <section key={r.game.id}>
-          <h2 className="bg-black px-4 pt-3 text-sm font-bold text-white">🎳 {r.game.game_no}게임</h2>
-          <GameBoard
-            ranked={r.ranked}
-            nameOf={nameOf}
-            puppets={Object.fromEntries(r.game.teams.map((t) => [t.team_no, t.fill_score]))}
-            complete={r.complete}
-            missing={r.missing}
-            charges={r.charges}
-            highlightMemberId={meId ?? undefined}
+      {results.length === 0 ? (
+        <Empty dark>아직 게임이 없어요.</Empty>
+      ) : (
+        <>
+          <Segmented
+            dark
+            label="게임 선택"
+            options={options}
+            value={selected === "settle" ? "settle" : String(selected!.game.game_no)}
+            className="mx-5 mt-4"
           />
-        </section>
-      ))}
 
-      <section className="px-4 pt-6">
-        <h2 className="mb-2 text-sm font-bold">전체 점수표</h2>
-        <div className="overflow-x-auto rounded-2xl border border-line">
-          <table className="w-full text-sm">
-            <thead className="bg-background text-xs text-muted">
-              <tr>
-                <th className="px-3 py-2 text-left">이름</th>
-                {results.map((r) => (
-                  <th key={r.game.id} className="px-2 py-2 text-right">
-                    {r.game.game_no}G
-                  </th>
-                ))}
-                <th className="px-3 py-2 text-right">평균</th>
-              </tr>
-            </thead>
-            <tbody>
-              {playerRows.map((p) => (
-                <tr key={p.id} className={`border-t border-line ${p.id === meId ? "bg-amber-50" : ""}`}>
-                  <td className="px-3 py-2 font-bold whitespace-nowrap">{nameOf(p.id)}</td>
-                  {results.map((r) => {
-                    const c = cell(p.id, r);
-                    return (
-                      <td key={r.game.id} className="px-2 py-2 text-right font-mono">
-                        {c ? (
-                          <span style={{ borderBottom: `2px solid ${teamColor(c.teamNo)}` }}>{c.score ?? "—"}</span>
-                        ) : (
-                          <span className="text-muted">·</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="px-3 py-2 text-right font-mono font-bold">{p.avg ? p.avg.toFixed(1) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-1 text-xs text-muted">점수 밑줄 색 = 그 게임의 팀</p>
-      </section>
+          {selected === "settle" ? (
+            <>
+              <p className="px-5 pt-4 text-[13px] text-dark-muted">
+                {session.closed_at ? "정모 마감 · " : "진행 중 · 점수가 다 들어온 게임만 · "}1/N은 100원 단위 올림
+              </p>
+              {totals.length === 0 ? (
+                <Empty dark>아직 정산할 게임이 없어요.</Empty>
+              ) : (
+                <div className="mx-5 mt-3 overflow-hidden rounded-2xl bg-dark-surface">
+                  {totals.map((t) => (
+                    <div
+                      key={t.memberId}
+                      className={`flex min-h-[52px] items-center gap-3 border-b border-dark-separator px-4 py-1.5 last:border-b-0 ${
+                        t.memberId === me ? "bg-dark-me" : ""
+                      }`}
+                    >
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className={`text-base ${t.memberId === me ? "font-bold" : "font-medium"}`}>
+                          {nameOf(t.memberId)}
+                        </span>
+                        <span className="truncate text-[11px] text-dark-muted">게임별 {perGame(t.memberId)}</span>
+                      </div>
+                      <span className="text-lg font-bold">{formatAmount(t.total)}원</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <Scoreboard
+                ranked={selected!.ranked}
+                puppets={Object.fromEntries(selected!.game.teams.map((t) => [t.team_no, t.fill_score]))}
+                complete={selected!.complete}
+                missing={selected!.missing}
+              />
+              {selected!.complete && (
+                <ChargeSummary
+                  ranked={selected!.ranked}
+                  charges={selected!.charges}
+                  nameOf={nameOf}
+                  fee={session.fee_per_game}
+                />
+              )}
 
-      {totals.length > 0 && (
-        <section className="px-4 pt-6">
-          <h2 className="mb-2 text-sm font-bold">💸 정산 {!session.closed_at && "(진행 중 · 점수가 다 들어온 게임만)"}</h2>
-          <ul className="overflow-hidden rounded-2xl border border-line">
-            {totals.map((t) => (
-              <li
-                key={t.memberId}
-                className={`flex items-center border-b border-line px-4 py-2.5 last:border-b-0 ${
-                  t.memberId === meId ? "bg-amber-50" : ""
-                }`}
-              >
-                <span className="font-bold">{nameOf(t.memberId)}</span>
-                <span className={`ml-auto font-mono font-bold ${t.total > 0 ? "text-danger" : "text-muted"}`}>
-                  {formatWon(t.total)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+              <SectionTitle dark note="옆으로 넘겨보기">
+                팀별 점수
+              </SectionTitle>
+              <TeamCards
+                ranked={selected!.ranked}
+                puppets={Object.fromEntries(selected!.game.teams.map((t) => [t.team_no, t.fill_score]))}
+                nameOf={nameOf}
+                scored={selected!.scores}
+                highlightMemberId={me}
+              />
+
+              <SectionTitle dark>전체 점수표</SectionTitle>
+              <ScoreTable ranked={selected!.ranked} nameOf={nameOf} scored={selected!.scores} highlightMemberId={me} />
+            </>
+          )}
+        </>
       )}
     </div>
   );
