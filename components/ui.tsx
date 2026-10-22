@@ -4,8 +4,16 @@ import type { ReactNode } from "react";
 // 공통 모양 (DESIGN_GUIDE.md 3장). 상태가 없는 표시용 조각만 둔다.
 
 /** 주요 버튼: 높이 52px 캡슐, 파란 배경 */
-export const primaryButton =
-  "flex h-[52px] w-full items-center justify-center rounded-full bg-accent px-5 text-[17px] font-semibold text-white active:opacity-90 disabled:opacity-40";
+const capsule =
+  "flex h-[52px] w-full items-center justify-center gap-1.5 rounded-full px-5 text-[17px] font-semibold active:opacity-90 disabled:opacity-40";
+
+export const primaryButton = `${capsule} bg-accent text-white`;
+
+/** 어두운 화면의 두 번째 주요 버튼 (흰 캡슐) */
+export const whiteButton = `${capsule} bg-white text-black`;
+
+/** 회색 캡슐 (주요 버튼 자리에 덜 강조할 때) */
+export const quietButton = `${capsule} bg-fill text-foreground`;
 
 /** 보조 버튼: 높이 48px, 회색 바탕 */
 export const secondaryButton =

@@ -4,14 +4,20 @@ const STEPS = ["참석", "팀 구성", "점수", "결과"] as const;
 export type Step = (typeof STEPS)[number];
 
 /** 정모 진행 단계 표시: 참석 → 팀 구성 → 점수 → 결과. 지나온·현재 단계는 파랑. */
-export function StepBar({ current }: { current: Step }) {
+export function StepBar({ current, dark }: { current: Step; dark?: boolean }) {
   const at = STEPS.indexOf(current);
   return (
     <ol aria-label="진행 단계" className="mx-5 mt-2 grid grid-cols-4 gap-1.5">
       {STEPS.map((label, i) => (
         <li key={label} aria-current={i === at ? "step" : undefined} className="flex flex-col gap-1.5">
-          <span className={`h-1 rounded-sm ${i <= at ? "bg-accent" : "bg-edge"}`} />
-          <span className={`text-xs ${i === at ? "font-semibold text-accent" : "text-muted"}`}>{label}</span>
+          <span
+            className={`h-1 rounded-sm ${i <= at ? (dark ? "bg-dark-link" : "bg-accent") : dark ? "bg-dark-separator" : "bg-edge"}`}
+          />
+          <span
+            className={`text-xs ${i === at ? `font-semibold ${dark ? "text-dark-link" : "text-accent"}` : dark ? "text-dark-muted" : "text-muted"}`}
+          >
+            {label}
+          </span>
         </li>
       ))}
     </ol>

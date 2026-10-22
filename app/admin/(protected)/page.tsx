@@ -62,7 +62,7 @@ export default async function AdminHomePage() {
               )}
               <Link
                 href={pending ? `/admin/sessions/${s.id}/games/${pending.game.id}/scores` : `/admin/sessions/${s.id}`}
-                className={`${primaryButton} h-[50px]`}
+                className={primaryButton}
               >
                 {pending ? `${pending.game.game_no}게임 점수 입력 이어하기` : "정모 이어하기"}
               </Link>

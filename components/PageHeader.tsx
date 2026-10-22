@@ -76,10 +76,12 @@ export function NavBar({
   backLabel,
   backText,
   right,
+  dark,
 }: {
   title: ReactNode;
   back?: string;
   backLabel?: string;
+  dark?: boolean;
   /** 화살표 없이 글자만 ("취소" 등) */
   backText?: boolean;
   right?: ReactNode;
@@ -89,11 +91,14 @@ export function NavBar({
       <div>
         {back &&
           (backText ? (
-            <Link href={back} className="flex min-h-11 items-center px-2 text-[17px] text-link">
+            <Link
+              href={back}
+              className={`flex min-h-11 items-center px-2 text-[17px] ${dark ? "text-dark-link" : "text-link"}`}
+            >
               {backLabel}
             </Link>
           ) : (
-            <BackLink href={back} label={backLabel} />
+            <BackLink href={back} label={backLabel} dark={dark} />
           ))}
       </div>
       <span className="truncate text-[17px] font-semibold">{title}</span>

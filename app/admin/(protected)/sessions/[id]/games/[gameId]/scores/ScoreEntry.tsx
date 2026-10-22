@@ -6,7 +6,7 @@ import { BottomBar, StepBar } from "@/components/Flow";
 import { Icon } from "@/components/Icon";
 import { NavBar } from "@/components/PageHeader";
 import { teamName } from "@/components/TeamBadge";
-import { primaryButton, secondaryButton } from "@/components/ui";
+import { primaryButton, quietButton } from "@/components/ui";
 import { isCompleteScore, parseScore } from "@/lib/domain/score";
 import { saveScore } from "./actions";
 
@@ -192,7 +192,7 @@ export function ScoreEntry({
         )}
         <Link
           href={`/admin/sessions/${sessionId}/games/${gameId}`}
-          className={left === 0 ? primaryButton : `${secondaryButton} h-[52px] rounded-full`}
+          className={left === 0 ? primaryButton : quietButton}
         >
           {left === 0 ? "결과 보기" : "중간 결과 보기"}
         </Link>
