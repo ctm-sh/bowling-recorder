@@ -95,7 +95,7 @@ type ChargeRow = { key: string; title: string; amount: number; note: string; big
  * 게임 정산을 팀 단위로 풀어 쓴다 (계산은 settle()이 이미 끝낸 charges 그대로).
  * - 아래 팀: 1인 금액 + "3등 → 1등 A팀 3명분 + 자기 팀 3명분"
  * - 가운데 팀: 자기 게임비만
- * - 위 팀에서 인원이 많아 자기 몫을 내는 사람: 사람별로
+ * - 인원이 더 많아 자기 몫만 내는 사람(위 팀 개인 최저, 아래 팀 개인 최고): 사람별로
  */
 export function chargeRows(ranked: RankedTeam[], charges: Charge[], nameOf: (id: string) => string): ChargeRow[] {
   const k = ranked.length;
@@ -105,17 +105,8 @@ export function chargeRows(ranked: RankedTeam[], charges: Charge[], nameOf: (id:
     const mine = charges.filter((c) => c.teamNo === t.teamNo);
     if (mine.length === 0) continue;
     const name = teamName(t.teamNo);
-    if (mine.every((c) => c.kind === "loser")) {
-      const partner = ranked.find((p) => p.rank === k + 1 - t.rank)!;
-      const covered = Math.min(partner.members.length, t.members.length);
-      rows.push({
-        key: `t${t.teamNo}`,
-        title: `${name} ${t.members.length}명 · 1인`,
-        amount: mine[0].amount,
-        note: `${t.rank}등 → ${partner.rank}등 ${teamName(partner.teamNo)} ${covered}명분 + 자기 팀 ${t.members.length}명분 = ${formatAmount(mine.reduce((s, c) => s + c.amount, 0))}원`,
-        big: true,
-      });
-    } else if (mine.every((c) => c.kind === "self")) {
+    const partner = ranked.find((p) => p.rank === k + 1 - t.rank)!;
+    if (partner.teamNo === t.teamNo) {
       rows.push({
         key: `t${t.teamNo}`,
         title: `${name} ${t.members.length}명 · 1인`,
@@ -123,19 +114,30 @@ export function chargeRows(ranked: RankedTeam[], charges: Charge[], nameOf: (id:
         note: "가운데 순위 · 자기 게임비만",
         big: false,
       });
-    } else {
-      const partner = ranked.find((p) => p.rank === k + 1 - t.rank)!;
-      const extra = t.members.length - partner.members.length;
-      for (const c of mine.filter((c) => c.kind === "self")) {
-        const m = t.members.find((x) => x.memberId === c.memberId)!;
-        rows.push({
-          key: c.memberId,
-          title: `${name} ${nameOf(c.memberId)}`,
-          amount: c.amount,
-          note: `${name}이 ${extra}명 더 많아 개인 최저(${m.score}+${m.handicap})가 자기 몫 부담`,
-          big: false,
-        });
-      }
+      continue;
+    }
+    const lower = t.rank > partner.rank;
+    const losers = mine.filter((c) => c.kind === "loser");
+    if (lower && losers.length > 0) {
+      const covered = Math.min(partner.members.length, losers.length);
+      rows.push({
+        key: `t${t.teamNo}`,
+        title: `${name} ${losers.length}명 · 1인`,
+        amount: losers[0].amount,
+        note: `${t.rank}등 → ${partner.rank}등 ${teamName(partner.teamNo)} ${covered}명분 + 자기 팀 ${losers.length}명분 = ${formatAmount(losers.reduce((s, c) => s + c.amount, 0))}원`,
+        big: true,
+      });
+    }
+    const extra = Math.abs(t.members.length - partner.members.length);
+    for (const c of mine.filter((c) => c.kind === "self")) {
+      const m = t.members.find((x) => x.memberId === c.memberId)!;
+      rows.push({
+        key: c.memberId,
+        title: `${name} ${nameOf(c.memberId)}`,
+        amount: c.amount,
+        note: `${name}이 ${extra}명 더 많아 개인 ${lower ? "최고" : "최저"}(${m.score}+${m.handicap})는 자기 몫만`,
+        big: false,
+      });
     }
   }
   return rows;
@@ -196,11 +198,14 @@ export function ChargeSummary({
           const selfPayers = mine.filter((c) => c.kind === "self");
           let amount = 0;
           let note = "";
-          if (mine.every((c) => c.kind === "loser")) {
-            amount = mine[0]?.amount ?? 0;
+          const losers = mine.filter((c) => c.kind === "loser");
+          if (losers.length > 0) {
+            amount = losers[0].amount;
             note = partner
-              ? `${teamName(partner.teamNo)} ${Math.min(partner.members.length, t.members.length)}명분 포함`
+              ? `${teamName(partner.teamNo)} ${Math.min(partner.members.length, losers.length)}명분 포함`
               : "";
+            if (selfPayers.length > 0)
+              note += ` · ${selfPayers.map((c) => nameOf(c.memberId)).join(", ")}는 ${formatAmount(fee)}`;
           } else if (mine.every((c) => c.kind === "self")) {
             amount = fee;
             note = "자기 몫";
