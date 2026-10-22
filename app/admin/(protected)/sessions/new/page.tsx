@@ -1,4 +1,5 @@
-import { PageHeader } from "@/components/PageHeader";
+import { StepBar } from "@/components/Flow";
+import { NavBar } from "@/components/PageHeader";
 import { db } from "@/lib/db/client";
 import { todayKST } from "@/lib/db/sessions";
 import { NewSessionForm } from "./NewSessionForm";
@@ -9,10 +10,8 @@ export default async function NewSessionPage() {
 
   return (
     <>
-      <PageHeader
-        title="새 정모"
-        back="/admin/sessions"
-      />
+      <NavBar title="새 정모" back="/admin/sessions" backLabel="취소" backText />
+      <StepBar current="참석" />
       <NewSessionForm today={todayKST()} defaultFee={data.default_fee} />
     </>
   );
