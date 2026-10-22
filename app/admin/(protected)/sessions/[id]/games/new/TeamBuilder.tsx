@@ -330,7 +330,7 @@ export function TeamBuilder({
     valid ? t.memberSlots.find((s) => s.groupNo === row + 1) : t.memberSlots[row];
   const receiving = teams.filter((t) => t.netDefault > 0 || t.override !== undefined);
   const adjustedTeams = teams.filter((t) => t.override !== undefined && Number(t.override) !== t.netDefault);
-  const grid = { gridTemplateColumns: `28px repeat(${teamCount}, minmax(88px, 1fr))` };
+  const grid = { gridTemplateColumns: `28px repeat(${teamCount}, minmax(72px, 1fr))` };
 
   return (
     <div>
@@ -373,7 +373,7 @@ export function TeamBuilder({
       {/* 팀 형태 */}
       <section className="flex flex-col gap-2 pt-4">
         <GroupLabel className="px-6">형태 · {participants.length}명</GroupLabel>
-        <div className="flex gap-2 overflow-x-auto px-5 pb-1">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto px-5 pb-1">
           {formations(participants.length).map((f) => {
             const on = teamCount === f.teams;
             return (
@@ -467,7 +467,7 @@ export function TeamBuilder({
         onDragEnd={onDragEnd}
         onDragCancel={() => setDragging(null)}
       >
-        <div className="mx-5 overflow-x-auto rounded-2xl bg-surface">
+        <div className="scrollbar-none mx-5 overflow-x-auto rounded-2xl bg-surface">
           <div className="min-w-fit">
             <div className="grid gap-1.5 border-b border-separator px-3 pt-3 pb-2" style={grid}>
               <span />
@@ -541,8 +541,9 @@ export function TeamBuilder({
                 {teams.map((t) => {
                   const receives = receiving.includes(t);
                   return receives ? (
-                    <label key={t.teamNo} className="flex min-h-11 items-center gap-1">
+                    <label key={t.teamNo} className="flex min-h-11 items-center">
                       <span className="sr-only">{teamName(t.teamNo)} 핸디 합의 조정</span>
+                      <Icon name="pencil" size={14} strokeWidth={2} className="mr-1 text-accent" />
                       <span className="text-xl font-bold">+</span>
                       <input
                         type="number"
@@ -551,9 +552,8 @@ export function TeamBuilder({
                         value={t.net}
                         onChange={(e) => setOverride(t.teamNo, e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        className="w-14 min-w-0 bg-transparent text-xl font-bold outline-none focus:text-accent"
+                        className="w-full min-w-0 bg-transparent text-xl font-bold outline-none focus:text-accent"
                       />
-                      <Icon name="pencil" size={14} strokeWidth={2} className="text-accent" />
                     </label>
                   ) : (
                     <span key={t.teamNo} className="text-xl font-bold text-muted">

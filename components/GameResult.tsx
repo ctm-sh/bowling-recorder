@@ -240,7 +240,7 @@ export function TeamCards({
   highlightMemberId?: string;
 }) {
   return (
-    <div className="flex snap-x gap-2.5 overflow-x-auto px-5 pb-1">
+    <div className="scrollbar-none flex snap-x scroll-px-5 gap-2.5 overflow-x-auto px-5 pb-1">
       {ranked.map((t) => {
         const puppet = puppets[t.teamNo];
         return (

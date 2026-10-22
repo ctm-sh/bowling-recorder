@@ -71,3 +71,11 @@ body:has(.screen-dark) .tab-bar {
 body:has(.screen-dark) .tab-bar a:not([aria-current]) {
   color: var(--dark-text-2);
 }
+
+/* 옆으로 넘기는 영역은 스크롤바를 숨긴다 */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

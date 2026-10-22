@@ -56,7 +56,7 @@ export function MemberList({
         </div>
       </div>
 
-      <div className="mx-5 mt-3 flex gap-2 overflow-x-auto">
+      <div className="scrollbar-none mx-5 mt-3 flex gap-2 overflow-x-auto">
         {(
           [
             ["all", "전체"],
@@ -100,8 +100,7 @@ export function MemberList({
                   </div>
                   {form !== null && (
                     <span className={`text-[17px] font-bold ${kind === "up" ? "text-accent" : ""}`}>
-                      {form > 0 ? "+" : "−"}
-                      {Math.abs(form).toFixed(1)}
+                      {Math.abs(form) < 0.05 ? "0.0" : `${form > 0 ? "+" : "−"}${Math.abs(form).toFixed(1)}`}
                     </span>
                   )}
                   <Icon name="chevronRight" size={14} strokeWidth={2.4} className="text-[#c7c7cc]" />

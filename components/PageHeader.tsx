@@ -101,7 +101,7 @@ export function NavBar({
             <BackLink href={back} label={backLabel} dark={dark} />
           ))}
       </div>
-      <span className="truncate text-[17px] font-semibold">{title}</span>
+      <h1 className="truncate text-[17px] font-semibold">{title}</h1>
       <div className="flex justify-end pr-2">{right}</div>
     </header>
   );
