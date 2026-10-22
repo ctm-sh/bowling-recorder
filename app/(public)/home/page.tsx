@@ -1,19 +1,20 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
-import { TierBadge } from "@/components/TierBadge";
-import { TEAM_NAME } from "@/lib/brand";
+import { tierLabel } from "@/components/TierBadge";
+import { Card, Pill } from "@/components/ui";
+import { completeGames } from "@/lib/db/allGames";
 import { listMembers } from "@/lib/db/members";
 import { getSessionResults } from "@/lib/db/results";
 import { listSessions } from "@/lib/db/sessions";
-import { formatDate, formatWon } from "@/lib/format";
+import { getSettings } from "@/lib/db/settings";
+import { winRecord } from "@/lib/domain/stats";
+import { formatAmount, formatDateLong } from "@/lib/format";
 import { getMeId } from "@/lib/me";
 import { WhoAmI } from "../WhoAmI";
 
-const MENU = [
-  { href: "/results", icon: "🎳", title: "결과", desc: "정모별 게임 결과·정산" },
-  { href: "/me", icon: "📈", title: "내 기록", desc: "에버·승률·상대 전적" },
-  { href: "/ranking", icon: "🏆", title: "랭킹", desc: "에버·폼·승률 순위" },
-];
+const round1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const { pick } = await searchParams;
@@ -28,101 +29,140 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
 
   // 게임이 있는 가장 최근 정모에서 내 게임
   const latest = sessions.find((s) => s.gameCount > 0);
-  const results = latest ? await getSessionResults(latest.id, latest.fee_per_game) : [];
+  const [results, games, settings] = await Promise.all([
+    latest ? getSessionResults(latest.id, latest.fee_per_game) : Promise.resolve([]),
+    completeGames(),
+    getSettings(),
+  ]);
   const mine = results
     .map((r) => {
       const team = r.ranked.find((t) => t.members.some((m) => m.memberId === me.id));
       if (!team) return null;
-      const self = team.members.find((m) => m.memberId === me.id)!;
       return {
         gameNo: r.game.game_no,
         complete: r.complete,
         score: r.scores[me.id],
-        handicap: self.handicap,
         rank: team.rank,
-        teamCount: r.ranked.length,
         charge: r.charges.find((c) => c.memberId === me.id)?.amount ?? 0,
       };
     })
     .filter((g) => g !== null);
   const owed = mine.reduce((s, g) => s + g.charge, 0);
+  const win = winRecord(games, me.id);
+  const form = me.avg !== null && me.recentAvg !== null ? me.recentAvg - me.avg : null;
 
   return (
     <div className="pb-6">
-      {/* 뒤로 가기 = 이름 고르기 화면 (다른 이름으로 바꿀 때도 여기서) */}
-      <PageHeader title={`🎳 ${TEAM_NAME}`} back="/home?pick=1" />
+      <PageHeader
+        eyebrow={`${tierLabel(me.tier)} · ${me.name}`}
+        title="홈"
+        action={
+          // 이름 고르기 화면으로 (다른 이름으로 바꿀 때)
+          <Link
+            href="/home?pick=1"
+            className="flex min-h-11 items-center gap-1.5 rounded-full bg-surface px-4 text-sm font-semibold text-link"
+          >
+            <Icon name="swap" size={16} strokeWidth={2} />
+            다른 떼굴러로 보기
+          </Link>
+        }
+      />
 
-      <div className="mx-4 mt-5 flex items-center gap-2">
-        <TierBadge tier={me.tier} />
-        <span className="text-2xl font-bold">{me.name}님</span>
-        <span className="text-2xl" aria-hidden>
-          👋
-        </span>
-      </div>
-
-      {latest && mine.length > 0 ? (
-        <section className="m-4 overflow-hidden rounded-2xl border border-line shadow-sm">
-          <div className="flex items-center justify-between bg-[#0b0f1a] px-4 py-3 text-white">
-            <span className="font-bold">{formatDate(latest.date)} 정모</span>
-            <span className="text-xs text-gray-400">{latest.closed_at ? "마감" : "진행 중"}</span>
+      <div className="flex flex-col gap-3 px-5 pt-4">
+        <section className="flex flex-col gap-4 rounded-[18px] bg-black p-5 text-white">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] font-semibold text-dark-muted">
+              {latest ? `최근 정모 · ${formatDateLong(latest.date)} · ${latest.gameCount}게임` : "최근 정모"}
+            </span>
+            {latest && <Pill tone="light">{latest.closed_at ? "마감" : "진행 중"}</Pill>}
           </div>
-          <ul>
-            {mine.map((g) => (
-              <li key={g.gameNo} className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
-                <span className="w-12 text-muted">{g.gameNo}게임</span>
-                <span className="font-mono text-lg font-bold">
-                  {g.score ?? "—"}
-                  {g.handicap > 0 && <span className="text-xs font-normal text-muted">+{g.handicap}</span>}
+
+          {latest && mine.length > 0 ? (
+            <>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[13px] text-dark-muted">내가 낼 금액</span>
+                <span className="text-5xl leading-[1.07] font-bold tracking-[-1px]">
+                  {formatAmount(owed)}
+                  <span className="text-[22px] font-semibold">원</span>
                 </span>
-                {g.complete ? (
-                  <>
-                    <span className={`text-xs font-bold ${g.rank === 1 ? "text-green-700" : "text-danger"}`}>
-                      {g.rank === 1 ? "승" : g.rank === g.teamCount ? "패" : `${g.rank}위`}
-                    </span>
-                    <span className={`ml-auto font-mono ${g.charge > 0 ? "text-danger" : "text-muted"}`}>
-                      {formatWon(g.charge)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="ml-auto text-xs text-muted">입력 중</span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm font-bold">💸 내가 낼 금액</span>
-            <span className={`font-mono text-2xl font-bold ${owed > 0 ? "text-danger" : "text-green-700"}`}>
-              {owed > 0 ? formatWon(owed) : "0원 🎉"}
-            </span>
-          </div>
-          <Link
-            href={`/results/${latest.id}`}
-            className="block border-t border-line py-3 text-center text-sm font-bold text-brand"
-          >
-            이 정모 전체 결과 보기 ›
-          </Link>
-        </section>
-      ) : (
-        <p className="m-4 rounded-2xl bg-background p-5 text-center text-sm text-muted">
-          {latest ? `${formatDate(latest.date)} 정모에는 참여하지 않았어요.` : "아직 기록된 정모가 없어요."}
-        </p>
-      )}
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {mine.map((g) => (
+                  <div
+                    key={g.gameNo}
+                    className="flex flex-col items-center gap-0.5 rounded-[11px] bg-dark-surface py-2.5"
+                  >
+                    <span className="text-[11px] text-dark-muted">{g.gameNo}게임</span>
+                    <span className="text-xl font-bold">{g.score ?? "—"}</span>
+                    {g.complete ? (
+                      <span
+                        className={`text-[11px] ${g.rank === 1 ? "font-semibold text-dark-link" : "text-dark-muted"}`}
+                      >
+                        {g.rank}등
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-dark-muted">입력 중</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-[15px] text-dark-muted">
+              {latest ? "이번 정모에는 참여하지 않았어요." : "아직 기록된 정모가 없어요."}
+            </p>
+          )}
 
-      <nav className="mx-4 mt-2 grid grid-cols-3 gap-2">
-        {MENU.map((m) => (
-          <Link
-            key={m.href}
-            href={m.href}
-            className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-surface px-2 py-4 text-center shadow-sm active:bg-background"
-          >
-            <span className="text-3xl" aria-hidden>
-              {m.icon}
-            </span>
-            <span className="font-bold">{m.title}</span>
-            <span className="text-[11px] leading-tight text-muted">{m.desc}</span>
-          </Link>
-        ))}
-      </nav>
+          {latest && (
+            <Link
+              href={`/results/${latest.id}`}
+              className="flex min-h-11 items-center justify-between border-t border-dark-separator pt-1 text-[15px] text-dark-link"
+            >
+              <span>게임별 전체 결과 보기</span>
+              <Icon name="chevronRight" size={16} strokeWidth={2} />
+            </Link>
+          )}
+        </section>
+
+        <Card className="flex flex-col gap-3.5 px-5 py-[18px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[17px] font-semibold">내 기록</span>
+            <Link href="/me" className="text-[15px] text-link">
+              자세히
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="전체 에버" value={me.avg === null ? "—" : round1(me.avg)} />
+            <Stat
+              label={`최근 ${settings.recent_n}게임`}
+              value={me.recentAvg === null ? "—" : round1(me.recentAvg)}
+              note={
+                form !== null && Math.abs(form) >= 0.05 ? (
+                  <span className={form > 0 ? "font-semibold text-accent" : "text-muted"}>
+                    {form > 0 ? `+${round1(form)} 상승` : `${round1(form)} 하락`}
+                  </span>
+                ) : undefined
+              }
+            />
+            <Stat
+              label="승률"
+              value={win.rate === null ? "—" : `${Math.round(win.rate * 100)}%`}
+              note={win.played > 0 ? `${win.wins}승 ${win.losses}패` : undefined}
+            />
+          </div>
+        </Card>
+        {/* TODO(디자인): 시안의 "다음 정모" 카드는 아직 없는 기능이라 넣지 않았다 */}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, note }: { label: string; value: string; note?: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-xs text-muted">{label}</span>
+      <span className="text-2xl font-bold tracking-[-0.4px]">{value}</span>
+      {note && <span className="text-xs text-muted">{note}</span>}
     </div>
   );
 }
