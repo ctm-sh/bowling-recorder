@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/PageHeader";
-import { TierBadge } from "@/components/TierBadge";
+import { Empty, PageHeader } from "@/components/PageHeader";
+import { tierLabel } from "@/components/TierBadge";
+import { Segmented } from "@/components/ui";
 import { completeGames } from "@/lib/db/allGames";
 import { listMembers } from "@/lib/db/members";
 import { winRecord } from "@/lib/domain/stats";
@@ -34,64 +35,64 @@ export default async function RankingPage({ searchParams }: PageProps<"/ranking"
       return (b.avg ?? 0) - (a.avg ?? 0);
     });
 
+  const winText = (m: (typeof rows)[number]) =>
+    m.win.rate === null ? "승률 —" : `승률 ${Math.round(m.win.rate * 100)}%`;
+
   return (
     <div className="pb-6">
-      <PageHeader title="랭킹" back="/home" />
-      <nav className="sticky top-14 z-10 grid grid-cols-3 gap-1 border-b border-line bg-surface p-3 text-sm">
-        {(Object.keys(SORTS) as Sort[]).map((s) => (
-          <Link
-            key={s}
-            href={s === "avg" ? "/ranking" : `/ranking?sort=${s}`}
-            aria-current={sort === s ? "page" : undefined}
-            className={`rounded-lg py-2 text-center ${sort === s ? "bg-brand font-bold text-white" : "bg-background text-muted"}`}
-          >
-            {SORTS[s]}
-          </Link>
-        ))}
-      </nav>
-      <p className="px-4 pt-2 text-xs text-muted">
-        {sort === "win"
-          ? "앱에서 기록한 팀전 기준 (팀 1등 = 승)"
-          : `활동 회원 중 ${MIN_GAMES}게임 이상 · ${sort === "recent" ? "최근 게임 에버" : "전체 에버"} 순`}
-      </p>
+      <PageHeader
+        eyebrow={sort === "win" ? "앱 팀전 기준 · 팀 1등 = 승" : `활동 회원 ${rows.length}명 · ${MIN_GAMES}게임 이상`}
+        title="랭킹"
+      />
+      <Segmented
+        label="정렬 기준"
+        value={sort}
+        options={(Object.keys(SORTS) as Sort[]).map((s) => ({
+          key: s,
+          label: SORTS[s],
+          href: s === "avg" ? "/ranking" : `/ranking?sort=${s}`,
+        }))}
+        className="mx-5 mt-4"
+      />
 
-      <ol className="mt-2">
-        {rows.map((m, i) => (
-          <li key={m.id} className={`border-b border-line ${m.id === meId ? "bg-amber-50" : ""}`}>
-            <Link href={`/members/${m.id}`} className="flex items-center gap-3 px-4 py-3">
-              <span className={`w-6 text-center font-mono font-bold ${i < 3 ? "text-brand" : "text-muted"}`}>
-                {i + 1}
-              </span>
-              <TierBadge tier={m.tier} />
-              <span className="font-bold">{m.name}</span>
-              <span className="ml-auto text-right">
-                <span className="block font-mono font-bold">
-                  {sort === "win"
-                    ? `${Math.round((m.win.rate ?? 0) * 100)}%`
-                    : (sort === "recent" ? m.recentAvg : m.avg)?.toFixed(1)}
-                </span>
-                <span className="block text-xs text-muted">
-                  {sort === "win" ? (
-                    `${m.win.wins}승 ${m.win.losses}패`
-                  ) : sort === "recent" && m.form !== null ? (
-                    <span className={m.form >= 0 ? "text-green-700" : "text-danger"}>
-                      {m.form >= 0 ? "▲" : "▼"}
-                      {Math.abs(m.form).toFixed(1)}
+      {rows.length === 0 ? (
+        <Empty>{sort === "win" ? "앱에서 기록한 게임이 아직 없어요." : "아직 랭킹에 들 회원이 없어요."}</Empty>
+      ) : (
+        <ol className="mx-5 mt-4 overflow-hidden rounded-2xl bg-surface">
+          {rows.map((m, i) => {
+            const me = m.id === meId;
+            return (
+              <li key={m.id} className={`border-b border-separator last:border-b-0 ${me ? "bg-accent-soft" : ""}`}>
+                <Link href={`/members/${m.id}`} className="flex min-h-14 items-center gap-3 px-4 py-2">
+                  <span className={`w-[22px] text-[17px] font-bold ${i < 3 ? "text-accent" : "text-muted"}`}>
+                    {i + 1}
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className={`truncate text-base ${me ? "font-bold" : "font-medium"}`}>{m.name}</span>
+                    <span className="truncate text-xs text-muted">
+                      {tierLabel(m.tier)} · {m.games}게임 ·{" "}
+                      {sort === "win" ? `${m.win.wins}승 ${m.win.losses}패` : winText(m)}
                     </span>
-                  ) : (
-                    `${m.games}게임`
-                  )}
-                </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-        {rows.length === 0 && (
-          <li className="p-8 text-center text-sm text-muted">
-            {sort === "win" ? "앱에서 기록한 게임이 아직 없어요." : "아직 랭킹에 들 회원이 없어요."}
-          </li>
-        )}
-      </ol>
+                  </div>
+                  <span className="flex flex-col items-end">
+                    <span className="text-xl font-bold tracking-[-0.3px]">
+                      {sort === "win"
+                        ? `${Math.round((m.win.rate ?? 0) * 100)}%`
+                        : (sort === "recent" ? m.recentAvg : m.avg)?.toFixed(1)}
+                    </span>
+                    {sort === "recent" && m.form !== null && Math.abs(m.form) >= 0.05 && (
+                      <span className={`text-xs ${m.form > 0 ? "font-semibold text-accent" : "text-muted"}`}>
+                        {m.form > 0 ? "+" : ""}
+                        {m.form.toFixed(1)}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </div>
   );
 }
