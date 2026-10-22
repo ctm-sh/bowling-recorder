@@ -8,7 +8,6 @@ import { getSessionResults } from "@/lib/db/results";
 import { listSessions } from "@/lib/db/sessions";
 import { tierCandidates } from "@/lib/domain/tiers";
 import { formatDateLong } from "@/lib/format";
-import { logout } from "../actions";
 
 export default async function AdminHomePage() {
   const [members, sessions] = await Promise.all([listMembers(), listSessions()]);
@@ -115,13 +114,6 @@ export default async function AdminHomePage() {
             </ListCard>
           </>
         )}
-
-        <form action={logout} className="flex justify-center pt-4">
-          <button className="flex min-h-11 items-center gap-1.5 px-4 text-[15px] text-link">
-            <Icon name="logout" size={18} />
-            로그아웃
-          </button>
-        </form>
       </div>
     </div>
   );

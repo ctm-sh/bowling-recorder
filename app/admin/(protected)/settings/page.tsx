@@ -1,7 +1,9 @@
 import { ActionButton } from "@/components/ActionButton";
 import { PageHeader } from "@/components/PageHeader";
+import { GroupLabel } from "@/components/ui";
 import { getSettings } from "@/lib/db/settings";
 import { googleConfigured, serviceAccountEmail } from "@/lib/sheets/google";
+import { logout } from "../../actions";
 import { syncNow } from "./actions";
 import { SettingsForm } from "./SettingsForm";
 
@@ -10,10 +12,11 @@ export default async function AdminSettingsPage() {
   const connected = googleConfigured();
   const email = serviceAccountEmail();
   const sheetUrl = settings.sheet_id ? `https://docs.google.com/spreadsheets/d/${settings.sheet_id}/edit` : "";
+  const ready = connected && !!settings.sheet_id;
 
   return (
     <div className="pb-6">
-      <PageHeader title="설정" back="/admin" />
+      <PageHeader title="설정" />
       <SettingsForm
         table={settings.handicap_table}
         fee={settings.default_fee}
@@ -21,42 +24,58 @@ export default async function AdminSettingsPage() {
         sheetUrl={sheetUrl}
       />
 
-      <section className="mx-4 rounded-2xl border border-line p-4">
-        <h2 className="text-sm font-bold">구글 시트 내보내기</h2>
-        <p className="mt-1 text-xs text-muted">
-          정모를 마감하면 자동으로 `점수기록지` 탭을 새로 써요. 시트의 다른 탭은 건드리지 않아요.
-        </p>
-
-        <dl className="mt-3 grid grid-cols-[5rem_1fr] gap-y-1 text-sm">
+      <GroupLabel className="px-6 pt-6 pb-2">데이터</GroupLabel>
+      <div className="mx-5 overflow-hidden rounded-2xl bg-surface">
+        <div className="flex min-h-[60px] items-center gap-3 border-b border-separator px-4 py-2">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-base">구글 시트 내보내기</span>
+            <span className="text-xs text-muted">점수기록지 탭 · 정모 마감 때 자동 반영</span>
+          </span>
+          <span
+            className={`text-[13px] font-semibold ${ready && !settings.last_sync_error ? "text-accent" : "text-muted"}`}
+          >
+            {!connected
+              ? "연결 안 됨"
+              : !settings.sheet_id
+                ? "시트 미설정"
+                : settings.last_sync_error
+                  ? "오류"
+                  : "연결됨"}
+          </span>
+        </div>
+        <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 border-b border-separator px-4 py-3 text-sm">
           <dt className="text-muted">서비스 계정</dt>
-          <dd className="break-all">{connected ? email : <span className="text-danger">연결 안 됨</span>}</dd>
+          <dd className="break-all">{connected ? email : "—"}</dd>
           <dt className="text-muted">시트</dt>
           <dd>
             {settings.sheet_id ? (
-              <a href={sheetUrl} target="_blank" rel="noreferrer" className="text-brand underline">
+              <a href={sheetUrl} target="_blank" rel="noreferrer" className="text-link">
                 시트 열기
               </a>
             ) : (
               <span className="text-muted">미설정</span>
             )}
           </dd>
-          <dt className="text-muted">마지막 성공</dt>
-          <dd>{settings.last_synced_at ? new Date(settings.last_synced_at).toLocaleString("ko-KR") : "—"}</dd>
+          <dt className="text-muted">마지막 반영</dt>
+          <dd>
+            {settings.last_synced_at
+              ? new Date(settings.last_synced_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+              : "—"}
+          </dd>
         </dl>
         {settings.last_sync_error && (
-          <p className="mt-2 rounded-lg bg-red-50 p-2 text-xs text-danger">마지막 오류: {settings.last_sync_error}</p>
+          <p className="border-b border-separator px-4 py-3 text-[13px] text-danger">
+            마지막 오류: {settings.last_sync_error}
+          </p>
         )}
-
-        {connected && settings.sheet_id ? (
-          <div className="mt-3">
-            <ActionButton action={syncNow} className="h-12 w-full rounded-xl bg-brand-soft font-bold text-brand">
-              ↻ 지금 내보내기
-            </ActionButton>
-          </div>
+        {ready ? (
+          <ActionButton action={syncNow} className="flex min-h-[52px] w-full items-center px-4 text-base text-link">
+            지금 내보내기
+          </ActionButton>
         ) : (
-          <details className="mt-3 rounded-xl bg-background p-3 text-sm" open={!connected}>
-            <summary className="cursor-pointer font-bold">연결 방법 (처음 한 번)</summary>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-relaxed">
+          <details className="px-4 py-3 text-sm" open={!connected}>
+            <summary className="flex min-h-8 cursor-pointer items-center text-link">연결 방법 (처음 한 번)</summary>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted">
               {!connected && (
                 <>
                   <li>console.cloud.google.com에서 프로젝트를 만들고 &quot;Google Sheets API&quot;를 사용 설정해요.</li>
@@ -73,7 +92,16 @@ export default async function AdminSettingsPage() {
             </ol>
           </details>
         )}
-      </section>
+        {/* TODO(디자인): 시안의 "기존 엑셀 가져오기"는 앱 기능이 아니라 scripts/import-xlsx.mjs 스크립트라 넣지 않았다 */}
+      </div>
+
+      <GroupLabel className="px-6 pt-6 pb-2">접근</GroupLabel>
+      <div className="mx-5 overflow-hidden rounded-2xl bg-surface">
+        {/* TODO(디자인): 시안의 "회원용 공유 링크 복사", "운영진 비밀번호 변경"은 아직 없는 기능이라 넣지 않았다 */}
+        <form action={logout}>
+          <button className="flex min-h-[52px] w-full items-center px-4 text-base text-link">운영진 로그아웃</button>
+        </form>
+      </div>
     </div>
   );
 }
