@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>볼링 기록 목업</title>
+<style>
+  :root { --navy:#1e2a5a; --line:#e5e7eb; --muted:#6b7280; --bg:#f3f4f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); font-family:-apple-system,"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif; color:#111; }
+  h1 { text-align:center; font-size:18px; margin:24px 16px 8px; }
+  p.note { text-align:center; color:var(--muted); font-size:13px; margin:0 16px 24px; }
+  .row { display:flex; flex-wrap:wrap; gap:24px; justify-content:center; padding:0 16px 40px; }
+  .label { text-align:center; font-size:13px; color:var(--muted); margin-bottom:8px; }
+  .phone { width:360px; max-width:100%; height:720px; border-radius:28px; border:8px solid #111; background:#fff; position:relative; overflow:hidden; display:flex; flex-direction:column; }
+  .top { padding:14px 16px 10px; border-bottom:1px solid var(--line); }
+  .top .title { font-weight:700; font-size:17px; display:flex; justify-content:space-between; }
+  .steps { display:flex; gap:6px; margin-top:10px; font-size:12px; color:var(--muted); }
+  .steps span { flex:1; text-align:center; padding:4px 0; border-bottom:3px solid var(--line); }
+  .steps .on { color:var(--navy); border-color:var(--navy); font-weight:700; }
+  .body { flex:1; overflow:auto; padding:12px 16px 90px; }
+  .team { border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; }
+  .team h3 { margin:0; padding:10px 14px; font-size:15px; display:flex; justify-content:space-between; background:#f9fafb; }
+  .team h3 small { color:var(--navy); font-weight:700; }
+  .p { display:flex; align-items:center; padding:9px 14px; border-top:1px solid var(--line); font-size:15px; }
+  .p .tier { margin-left:6px; font-size:12px; color:var(--muted); }
+  .p .avg { margin-left:auto; font-size:12px; color:var(--muted); }
+  .p input { margin-left:auto; width:84px; height:44px; font-size:22px; font-weight:700; text-align:center; border:2px solid var(--line); border-radius:10px; }
+  .p input:focus { outline:none; border-color:var(--navy); }
+  .sum { padding:10px 14px; border-top:1px solid var(--line); text-align:right; font-weight:700; color:var(--navy); }
+  .format { display:flex; gap:8px; margin-bottom:14px; }
+  .format button { flex:1; padding:10px 0; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:14px; }
+  .format .on { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .cta { position:absolute; left:0; right:0; bottom:0; padding:12px 16px 16px; background:#fff; border-top:1px solid var(--line); display:flex; gap:8px; }
+  .cta button { flex:1; height:52px; border-radius:12px; border:0; font-size:16px; font-weight:700; background:var(--navy); color:#fff; }
+  .cta button.ghost { background:#eef0f7; color:var(--navy); }
+
+  /* B: 결과 전광판 */
+  .dark { background:#0b0f1a; color:#e5e7eb; }
+  .board { display:flex; gap:6px; padding:14px 12px; background:#000; }
+  .board div { flex:1; text-align:center; border-radius:10px; padding:8px 0; background:#111827; }
+  .board b { display:block; font-size:24px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .board span { font-size:12px; }
+  .o { color:#ff9f43; } .s { color:#48dbfb; } .g { color:#7bed9f; }
+  .card { margin:14px 16px; border-radius:18px; padding:16px; border:2px solid #7bed9f; box-shadow:0 0 18px rgba(123,237,159,.25); }
+  .card h2 { margin:0 0 4px; font-size:20px; display:flex; justify-content:space-between; }
+  .card .pp { display:flex; justify-content:space-between; padding:6px 0; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:16px; border-bottom:1px dashed #263041; }
+  .card .tot { margin-top:10px; font-size:26px; font-weight:800; text-align:right; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .lose { margin:0 16px; padding:14px; border-radius:14px; background:#3b0d16; color:#ffb3c1; font-weight:700; text-align:center; }
+  .dots { text-align:center; margin:10px 0; letter-spacing:6px; color:#4b5563; }
+  .dark .cta { background:#0b0f1a; border-color:#1f2937; }
+  .dark .cta button { background:#ff9f43; color:#111; }
+  .dark .cta button.ghost { background:#1f2937; color:#e5e7eb; }
+</style>
+</head>
+<body>
+<h1>볼링 기록 서비스 · 선택안 목업 (A + B)</h1>
+<p class="note">팀 구성과 점수 입력은 A안(단계형 미니멀), 결과는 B안(전광판)</p>
+
+<div class="row">
+  <!-- 1. 팀 구성 (A) -->
+  <div>
+    <div class="label">① 팀 구성 · A</div>
+    <div class="phone">
+      <div class="top">
+        <div class="title"><span>← 10/25 정모 · 2게임</span><span style="color:var(--muted);font-weight:400">11명</span></div>
+        <div class="steps"><span class="on">팀 구성</span><span>점수</span><span>결과</span></div>
+      </div>
+      <div class="body">
+        <div class="format"><button>2팀</button><button class="on">4·4·3</button><button>개인전</button></div>
+        <div class="team"><h3>1팀 <small>핸디 +36</small></h3>
+          <div class="p">강바다<span class="tier">2</span><span class="avg">에버 188</span></div>
+          <div class="p">박민수<span class="tier">4</span><span class="avg">에버 171</span></div>
+          <div class="p">서다온<span class="tier">7</span><span class="avg">에버 128</span></div>
+          <div class="p">정하늘<span class="tier">1</span><span class="avg">에버 194</span></div>
+        </div>
+        <div class="team"><h3>2팀 <small>핸디 +40</small></h3>
+          <div class="p">윤나래<span class="tier">2</span><span class="avg">에버 182</span></div>
+          <div class="p">장도윤<span class="tier">3</span><span class="avg">에버 179</span></div>
+          <div class="p">오지호<span class="tier">6</span><span class="avg">에버 147</span></div>
+          <div class="p">최지수<span class="tier">1</span><span class="avg">에버 200</span></div>
+        </div>
+        <div class="team"><h3>3팀 <small>핸디 +44 · 3명</small></h3>
+          <div class="p">조은별<span class="tier">2</span><span class="avg">에버 184</span></div>
+          <div class="p">임서준<span class="tier">4</span><span class="avg">에버 159</span></div>
+          <div class="p">한예린<span class="tier">5</span><span class="avg">에버 168</span></div>
+        </div>
+      </div>
+      <div class="cta"><button class="ghost">🎲 다시 섞기</button><button>확정 →</button></div>
+    </div>
+  </div>
+
+  <!-- 2. 점수 입력 (A) -->
+  <div>
+    <div class="label">② 점수 입력 · A</div>
+    <div class="phone">
+      <div class="top">
+        <div class="title"><span>← 2게임</span><span style="color:var(--muted);font-weight:400">8/11 입력</span></div>
+        <div class="steps"><span>팀 구성</span><span class="on">점수</span><span>결과</span></div>
+      </div>
+      <div class="body">
+        <div class="team"><h3>1팀 <small>핸디 +36</small></h3>
+          <div class="p">강바다<span class="tier">2</span><input value="192" inputmode="numeric"></div>
+          <div class="p">박민수<span class="tier">4</span><input value="168" inputmode="numeric"></div>
+          <div class="p">서다온<span class="tier">7</span><input placeholder="—" inputmode="numeric"></div>
+          <div class="p">정하늘<span class="tier">1</span><input value="150" inputmode="numeric"></div>
+          <div class="sum">510 + 36</div>
+        </div>
+        <div class="team"><h3>2팀 <small>핸디 +40</small></h3>
+          <div class="p">윤나래<span class="tier">2</span><input value="201" inputmode="numeric"></div>
+          <div class="p">장도윤<span class="tier">3</span><input value="179" inputmode="numeric"></div>
+          <div class="p">오지호<span class="tier">6</span><input value="140" inputmode="numeric"></div>
+          <div class="p">최지수<span class="tier">1</span><input placeholder="—" inputmode="numeric"></div>
+        </div>
+      </div>
+      <div class="cta"><button>결과 보기 →</button></div>
+    </div>
+  </div>
+
+  <!-- 3. 결과 (B) -->
+  <div>
+    <div class="label">③ 결과 · B</div>
+    <div class="phone dark">
+      <div class="board">
+        <div><b class="o">782</b><span>🥇 1팀</span></div>
+        <div><b class="s">760</b><span>2팀</span></div>
+        <div><b class="g">728</b><span>💸 3팀</span></div>
+      </div>
+      <div class="dots">‹ ○ ○ ● ›</div>
+      <div class="card">
+        <h2><span class="g">3팀</span><span style="font-size:14px;color:#9ca3af">핸디 +44</span></h2>
+        <div class="pp"><span>조은별 ·2</span><span>188</span></div>
+        <div class="pp"><span>임서준 ·4</span><span>155</span></div>
+        <div class="pp"><span>한예린 ·5</span><span>170</span></div>
+        <div class="pp" style="color:#9ca3af"><span>★ 상대 없던 인원 에버</span><span>171</span></div>
+        <div class="tot">684 + 44 = <span class="g">728</span></div>
+      </div>
+      <div class="lose">💸 3팀 꼴찌 · 1팀 3명 + 3팀 3명 = 16,800원 ÷ 3<br>1인 5,600원 · 1팀 개인 꼴찌·2팀은 각자 2,800원</div>
+      <div class="cta"><button class="ghost">↻ 팀 그대로</button><button class="ghost">🎲 섞기</button><button>마감</button></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
