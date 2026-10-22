@@ -1,11 +1,9 @@
 import "server-only";
 import { db } from "@/lib/db/client";
-import { completeGames } from "@/lib/db/allGames";
 import { listMembers } from "@/lib/db/members";
 import { getSettings } from "@/lib/db/settings";
-import { winRecord } from "@/lib/domain/stats";
 import { googleConfigured, writeTabs } from "./google";
-import { memberRows, scoreRows, scoreSheetRows, settlementRows, type ExportGame } from "./rows";
+import { scoreSheetRows, type ExportGame } from "./rows";
 
 type GameRow = {
   game_no: number;
@@ -74,27 +72,8 @@ export async function syncToSheet(): Promise<{ ok: boolean; error?: string }> {
     if (!googleConfigured()) throw new Error("구글 서비스 계정이 아직 연결되지 않았어요.");
     if (!settings.sheet_id) throw new Error("설정에서 내보낼 구글 시트 주소를 먼저 넣어주세요.");
 
-    const [members, games, legacy, appGames] = await Promise.all([
-      listMembers(),
-      exportGames(),
-      legacyScores(),
-      completeGames(),
-    ]);
-    const names = new Map(members.map((m) => [m.id, m.name]));
-    const nameOf = (id: string) => names.get(id) ?? "?";
-
-    await writeTabs(settings.sheet_id, [
-      scoreSheetRows(members, games, legacy),
-      scoreRows(games, legacy, nameOf),
-      memberRows(
-        members.map((m) => {
-          const w = winRecord(appGames, m.id);
-          return { ...m, wins: w.wins, losses: w.losses };
-        }),
-        settings.recent_n,
-      ),
-      settlementRows(games, nameOf),
-    ]);
+    const [members, games, legacy] = await Promise.all([listMembers(), exportGames(), legacyScores()]);
+    await writeTabs(settings.sheet_id, [scoreSheetRows(members, games, legacy)]);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }

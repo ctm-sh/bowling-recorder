@@ -24,7 +24,7 @@ export default async function AdminSettingsPage() {
       <section className="mx-4 rounded-2xl border border-line p-4">
         <h2 className="text-sm font-bold">구글 시트 내보내기</h2>
         <p className="mt-1 text-xs text-muted">
-          정모를 마감하면 자동으로 `점수기록` · `회원현황` · `정산` 탭을 새로 써요. 시트의 다른 탭은 건드리지 않아요.
+          정모를 마감하면 자동으로 `점수기록지` 탭을 새로 써요. 시트의 다른 탭은 건드리지 않아요.
         </p>
 
         <dl className="mt-3 grid grid-cols-[5rem_1fr] gap-y-1 text-sm">
