@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/PageHeader";
 import { getGameWithScores } from "@/lib/db/games";
 import { listMembers } from "@/lib/db/members";
 import { getSession } from "@/lib/db/sessions";
@@ -26,11 +25,8 @@ export default async function ScoresPage({ params }: PageProps<"/admin/sessions/
 
   return (
     <>
-      <PageHeader
-        title={`${data.game.game_no}게임 점수`}
-        back={`/admin/sessions/${id}`}
-      />
       <ScoreEntry
+        gameNo={data.game.game_no}
         sessionId={id}
         gameId={gameId}
         teams={teams}

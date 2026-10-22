@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { TierBadge } from "@/components/TierBadge";
+import { BottomBar, StepBar } from "@/components/Flow";
+import { Icon } from "@/components/Icon";
+import { NavBar } from "@/components/PageHeader";
+import { teamName } from "@/components/TeamBadge";
+import { primaryButton, secondaryButton } from "@/components/ui";
 import { isCompleteScore, parseScore } from "@/lib/domain/score";
-import { teamColor } from "@/lib/teamColors";
 import { saveScore } from "./actions";
 
 export type EntryTeam = {
@@ -20,12 +23,14 @@ export type EntryTeam = {
 type Status = "saving" | "saved" | "error";
 
 export function ScoreEntry({
+  gameNo,
   sessionId,
   gameId,
   teams,
   initialScores,
   readOnly,
 }: {
+  gameNo: number;
   sessionId: string;
   gameId: string;
   teams: EntryTeam[];
@@ -85,64 +90,71 @@ export function ScoreEntry({
 
   const entered = order.filter((id) => values[id] !== "" && !("error" in parseScore(values[id]))).length;
 
-  return (
-    <div className="pb-40">
-      <div className="sticky top-14 z-10 border-b border-line bg-surface px-4 py-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-bold">
-            {entered}/{order.length} 입력
-          </span>
-          {readOnly && <span className="text-xs text-muted">마감된 정모 · 보기 전용</span>}
-        </div>
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-background">
-          <div className="h-full bg-brand transition-all" style={{ width: `${(entered / order.length) * 100}%` }} />
-        </div>
-      </div>
+  const left = order.length - entered;
 
-      <section className="flex flex-col gap-3 px-4 pt-4">
+  return (
+    <div>
+      <NavBar
+        title={`${gameNo}게임 점수`}
+        back={`/admin/sessions/${sessionId}`}
+        backLabel="정모"
+        right={
+          <span className="text-sm font-semibold text-accent" aria-live="polite">
+            {entered}/{order.length}
+          </span>
+        }
+      />
+      <StepBar current="점수" />
+      {readOnly && <p className="px-6 pt-3 text-[13px] text-muted">마감된 정모 · 보기 전용</p>}
+
+      <div className="flex flex-col gap-3 px-5 pt-4">
         {teams.map((t) => {
           const scores = t.members.map((m) => parseScore(values[m.id])).map((p) => ("score" in p ? p.score : null));
           const sum = scores.reduce<number>((a, s) => a + (s ?? 0), 0);
-          const missing = scores.filter((s) => s === null).length;
           return (
-            <div key={t.teamNo} className="overflow-hidden rounded-2xl border border-line">
-              <div className="flex items-center gap-2 bg-background px-4 py-2.5">
-                <span className="size-3 rounded-full" style={{ background: teamColor(t.teamNo) }} aria-hidden />
-                <span className="font-bold">{t.teamNo}팀</span>
-                {t.handicap > 0 && (
-                  <span className="text-xs font-bold text-brand">
-                    핸디 +{t.handicap}
-                    {t.adjusted && "*"}
-                  </span>
-                )}
+            <section key={t.teamNo} className="overflow-hidden rounded-2xl bg-surface">
+              <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
+                <span className="text-[15px] font-bold">{teamName(t.teamNo)}</span>
+                <span className="flex-1 text-xs text-muted">
+                  팀 핸디 {t.handicap > 0 ? `+${t.handicap}` : 0}
+                  {t.adjusted && " · 합의 조정"}
+                </span>
+                <span className="text-[13px] text-muted">
+                  합계 <span className="text-[17px] font-bold text-foreground">{sum + t.handicap}</span>
+                </span>
               </div>
 
-              <ul>
-                {t.members.map((m) => (
-                  <li key={m.id} className="border-t border-line px-4 py-2">
-                    <label className="flex items-center gap-2">
-                      <TierBadge tier={m.tier} />
-                      <span className="min-w-0 truncate font-bold">{m.name}</span>
-                      {m.handicap > 0 && (
-                        <span className="rounded bg-brand-soft px-1.5 text-xs font-bold text-brand">+{m.handicap}</span>
-                      )}
-                      <span className="ml-auto w-4 text-center text-xs" aria-live="polite">
-                        {status[m.id] === "saving" && <span className="text-muted">…</span>}
-                        {status[m.id] === "saved" && <span className="text-green-600">✓</span>}
-                        {status[m.id] === "error" && <span className="text-danger">!</span>}
+              {t.members.map((m) => {
+                const filled = values[m.id] !== "";
+                return (
+                  <div key={m.id} className="px-4 py-1.5">
+                    <div className="flex min-h-14 items-center gap-2.5">
+                      <label htmlFor={`score-${m.id}`} className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-base font-medium">{m.name}</span>
+                        <span className={`text-xs ${m.handicap > 0 ? "text-accent" : "text-muted"}`}>
+                          {m.handicap > 0 ? `핸디 +${m.handicap}` : "핸디 없음"}
+                        </span>
+                      </label>
+                      <span className="w-5 text-center" aria-live="polite">
+                        {status[m.id] === "saving" && <span className="text-xs text-muted">…</span>}
+                        {status[m.id] === "saved" && (
+                          <Icon name="check" size={16} strokeWidth={2.4} className="text-accent" label="저장됨" />
+                        )}
+                        {status[m.id] === "error" && <span className="text-sm font-bold text-danger">!</span>}
                       </span>
                       <input
+                        id={`score-${m.id}`}
                         ref={(el) => {
                           if (el) inputs.current.set(m.id, el);
                           else inputs.current.delete(m.id);
                         }}
-                        aria-label={`${m.name} 점수`}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        maxLength={3}
                         enterKeyHint="next"
                         autoComplete="off"
-                        placeholder="—"
+                        placeholder="-"
                         disabled={readOnly}
                         value={values[m.id]}
                         onChange={(e) => onChange(m.id, e.target.value)}
@@ -153,45 +165,38 @@ export function ScoreEntry({
                             focusNext(m.id);
                           }
                         }}
-                        className={`h-12 w-20 rounded-xl border-2 text-center text-2xl font-bold outline-none focus:border-brand disabled:bg-background ${
-                          status[m.id] === "error" ? "border-danger" : "border-line"
-                        }`}
+                        className={`h-12 w-24 rounded-xl border text-center text-2xl font-bold outline-none focus:border-2 focus:border-accent disabled:opacity-60 ${
+                          status[m.id] === "error" ? "border-2 border-danger" : "border-fill"
+                        } ${filled ? "bg-surface" : "bg-background"}`}
                       />
-                    </label>
-                    {errors[m.id] && <p className="mt-1 text-right text-xs text-danger">{errors[m.id]}</p>}
-                  </li>
-                ))}
-                {t.puppet !== null && (
-                  <li className="flex items-center gap-2 border-t border-dashed border-line px-4 py-2.5 text-sm text-muted">
-                    <span aria-hidden>🎎</span>
-                    꼭두각시 {t.puppet}점 (핸디에 포함)
-                  </li>
-                )}
-              </ul>
-
-              <div className="border-t border-line px-4 py-2.5 text-right">
-                <span className="text-sm text-muted">
-                  {sum}
-                  {t.handicap > 0 && ` + ${t.handicap}`} ={" "}
-                </span>
-                <span className="text-xl font-bold text-brand">{sum + t.handicap}</span>
-                {missing > 0 && <span className="ml-2 text-xs text-muted">({missing}명 미입력)</span>}
-              </div>
-            </div>
+                    </div>
+                    {errors[m.id] && <p className="text-right text-xs text-danger">{errors[m.id]}</p>}
+                  </div>
+                );
+              })}
+              {t.puppet !== null && (
+                <div className="flex min-h-12 items-center border-t border-separator px-4 text-[15px] text-muted">
+                  꼭두각시 {t.puppet}점 · 팀 핸디에 포함
+                </div>
+              )}
+            </section>
           );
         })}
-      </section>
+      </div>
 
-      <div className="fixed inset-x-0 bottom-16 z-20 mx-auto max-w-[480px] border-t border-line bg-surface p-3">
+      <BottomBar>
+        {!readOnly && (
+          <span className="text-center text-[13px] text-muted">
+            {left > 0 ? `입력하면 다음 사람으로 넘어가요 · ${left}명 남음` : "모두 입력했어요"}
+          </span>
+        )}
         <Link
           href={`/admin/sessions/${sessionId}/games/${gameId}`}
-          className={`flex h-14 items-center justify-center rounded-xl text-base font-bold ${
-            entered === order.length ? "bg-brand text-white" : "bg-brand-soft text-brand"
-          }`}
+          className={left === 0 ? primaryButton : `${secondaryButton} h-[52px] rounded-full`}
         >
-          {entered === order.length ? "결과 보기 →" : "중간 결과 보기"}
+          {left === 0 ? "결과 보기" : "중간 결과 보기"}
         </Link>
-      </div>
+      </BottomBar>
     </div>
   );
 }
