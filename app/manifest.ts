@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: `${TEAM_NAME} 볼링 동호회 점수·팀·정산 기록`,
     start_url: "/",
     display: "standalone",
-    background_color: "#f3f4f6",
-    theme_color: "#1e2a5a",
-    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
+    background_color: "#f5f5f7",
+    theme_color: "#000000",
+    icons: [{ src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" }],
   };
 }

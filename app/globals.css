@@ -1,32 +1,77 @@
 @import "tailwindcss";
 
-/* A안 톤: 흰 바탕, 남색 포인트 */
+/*
+ * 디자인 토큰 (design-handoff/DESIGN_GUIDE.md)
+ * 강조색은 파랑(--accent) 하나만 쓴다. 결과·정산 화면은 어두운 토큰(--dark-*)을 쓴다.
+ */
 :root {
-  --background: #f3f4f6;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --foreground: #111827;
-  --muted: #6b7280;
-  --line: #e5e7eb;
-  --brand: #1e2a5a;
-  --brand-soft: #eef0f7;
-  --danger: #dc2626;
+  --fill: #e8e8ed;
+  --separator: #ededf2;
+  --border: #d2d2d7;
+  --text: #1d1d1f;
+  --text-2: #6e6e73;
+  --accent: #0071e3;
+  --link: #0066cc;
+  --accent-soft: #e8f1fc;
+  --dark-bg: #000000;
+  --dark-surface: #1d1d1f;
+  --dark-separator: #333336;
+  --dark-text-2: #a1a1a6;
+  --dark-link: #2997ff;
+  --dark-me: #0a2a4d;
+  /* 오류 메시지 전용 */
+  --danger: #d70015;
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-background: var(--bg);
   --color-surface: var(--surface);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-brand: var(--brand);
-  --color-brand-soft: var(--brand-soft);
+  --color-fill: var(--fill);
+  --color-separator: var(--separator);
+  --color-edge: var(--border);
+  --color-foreground: var(--text);
+  --color-muted: var(--text-2);
+  --color-accent: var(--accent);
+  --color-link: var(--link);
+  --color-accent-soft: var(--accent-soft);
+  --color-dark-surface: var(--dark-surface);
+  --color-dark-separator: var(--dark-separator);
+  --color-dark-muted: var(--dark-text-2);
+  --color-dark-link: var(--dark-link);
+  --color-dark-me: var(--dark-me);
   --color-danger: var(--danger);
-  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  /* 예전 이름 (아직 바꾸지 않은 화면용) */
+  --color-line: var(--separator);
+  --color-brand: var(--accent);
+  --color-brand-soft: var(--accent-soft);
+  --font-sans:
+    var(--font-inter), var(--font-noto-kr), "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-sans);
+  letter-spacing: -0.2px;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* 결과·정산처럼 어두운 화면이 열려 있으면 바깥 배경도 검정으로 */
+body:has(.screen-dark) {
+  background: var(--dark-bg);
+}
+
+/* 하단 고정 버튼이 있는 화면에서는 탭바를 숨기고, 어두운 화면에서는 탭바도 어둡게 */
+body:has(.has-bottom-bar) .tab-bar,
+body:has(.has-bottom-bar) .tab-spacer {
+  display: none;
+}
+body:has(.screen-dark) .tab-bar {
+  background: rgb(0 0 0 / 0.8);
+  border-color: rgb(255 255 255 / 0.1);
+}
+body:has(.screen-dark) .tab-bar a:not([aria-current]) {
+  color: var(--dark-text-2);
 }

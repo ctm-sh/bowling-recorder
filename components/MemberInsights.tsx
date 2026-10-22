@@ -57,9 +57,7 @@ export function MemberInsights({
           <p className="mt-1 text-2xl font-bold">{avg === null ? "—" : avg.toFixed(1)}</p>
         </div>
         <div className="rounded-2xl border border-line p-4">
-          <p className="text-xs text-muted">
-            최근 {Math.min(recentN, recentGames)}게임 에버
-          </p>
+          <p className="text-xs text-muted">최근 {Math.min(recentN, recentGames)}게임 에버</p>
           <p className="mt-1 text-2xl font-bold">
             {recentAvg === null ? "—" : recentAvg.toFixed(1)}
             {form !== null && Math.abs(form) >= 0.05 && (
@@ -73,7 +71,10 @@ export function MemberInsights({
         <div className="col-span-2 rounded-2xl border border-line p-4">
           <p className="text-xs text-muted">팀전 승률 (팀 1등 = 승) · 앱 기록 {win.played}게임</p>
           <p className="mt-1 text-2xl font-bold">
-            {pct(win.rate)} <span className="text-base font-normal text-muted">{win.wins}승 {win.losses}패</span>
+            {pct(win.rate)}{" "}
+            <span className="text-base font-normal text-muted">
+              {win.wins}승 {win.losses}패
+            </span>
           </p>
         </div>
       </section>
