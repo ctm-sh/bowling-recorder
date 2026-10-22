@@ -44,11 +44,7 @@ export default async function NewGamePage({ params, searchParams }: PageProps<"/
     <>
       <PageHeader
         title={`${gameNo}게임 팀 구성`}
-        action={
-          <Link href={`/admin/sessions/${id}`} className="text-sm text-muted underline">
-            취소
-          </Link>
-        }
+        back={`/admin/sessions/${id}`}
       />
       {data.session.closed_at ? (
         <p className="m-4 rounded-xl bg-background p-4 text-sm text-muted">마감된 정모예요.</p>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionButton } from "@/components/ActionButton";
+import { TEAM_NAME } from "@/lib/brand";
 import { CopyButton } from "@/components/CopyButton";
 import { PageHeader } from "@/components/PageHeader";
 import { listMembers } from "@/lib/db/members";
@@ -26,18 +27,14 @@ export default async function SettlementPage({ params }: PageProps<"/admin/sessi
   const totals = totalsByMember(games);
   const sum = totals.reduce((s, t) => s + t.total, 0);
   const actualCost = done.reduce((s, r) => s + r.ranked.reduce((n, t) => n + t.members.length, 0), 0) * session.fee_per_game;
-  const text = settlementText({ title: formatDate(session.date), games, nameOf });
+  const text = settlementText({ title: `${TEAM_NAME} ${formatDate(session.date)}`, games, nameOf });
   const closed = !!session.closed_at;
 
   return (
     <div className="pb-8">
       <PageHeader
         title={`${formatDate(session.date)} 정산`}
-        action={
-          <Link href={`/admin/sessions/${id}`} className="text-sm text-muted underline">
-            정모
-          </Link>
-        }
+        back={`/admin/sessions/${id}`}
       />
 
       <div className="m-4 rounded-2xl bg-brand p-5 text-white">

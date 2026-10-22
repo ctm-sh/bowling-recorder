@@ -13,8 +13,11 @@ export function BottomTabs({ tabs, rootHref }: { tabs: Tab[]; rootHref: string }
     <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-[480px]">
         {tabs.map((tab) => {
+          // "/me"가 "/members"에 걸리지 않도록 경로 단위로 비교
           const active =
-            tab.href === rootHref ? pathname === rootHref : pathname.startsWith(tab.href);
+            tab.href === rootHref
+              ? pathname === rootHref
+              : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (
             <li key={tab.href} className="flex-1">
               <Link

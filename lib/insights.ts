@@ -42,8 +42,8 @@ export function memberInsights(memberId: string, games: PlayedGame[]) {
     byTier.set(tier, t);
   }
 
-  const recentGames: RecentGame[] = games
-    .slice(-10)
+  // 앱에서 기록한 전체 게임 (최근 순)
+  const allGames: RecentGame[] = [...games]
     .reverse()
     .map((g) => {
       const ranked = rankTeams(g.teams);
@@ -67,6 +67,6 @@ export function memberInsights(memberId: string, games: PlayedGame[]) {
       (a, b) => b.wins + b.losses + b.draws - (a.wins + a.losses + a.draws),
     ),
     byTier: [...byTier.entries()].sort((a, b) => a[0] - b[0]).map(([tier, r]) => ({ tier, ...r })),
-    recentGames,
+    allGames,
   };
 }

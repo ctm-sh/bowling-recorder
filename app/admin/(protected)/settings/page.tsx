@@ -13,7 +13,7 @@ export default async function AdminSettingsPage() {
 
   return (
     <div className="pb-6">
-      <PageHeader title="설정" />
+      <PageHeader title="설정" back="/admin" />
       <SettingsForm
         table={settings.handicap_table}
         fee={settings.default_fee}

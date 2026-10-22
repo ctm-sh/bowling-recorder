@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GameBoard } from "@/components/GameBoard";
 import { PageHeader } from "@/components/PageHeader";
@@ -43,11 +42,7 @@ export default async function SessionResultPage({ params }: PageProps<"/results/
     <div className="pb-6">
       <PageHeader
         title={`${formatDate(session.date)} 결과`}
-        action={
-          <Link href="/results" className="text-sm text-muted underline">
-            목록
-          </Link>
-        }
+        back="/results"
       />
 
       {results.map((r) => (

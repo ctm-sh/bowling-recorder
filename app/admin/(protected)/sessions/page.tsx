@@ -10,6 +10,7 @@ export default async function AdminSessionsPage() {
     <>
       <PageHeader
         title="정모"
+        back="/admin"
         action={
           <Link href="/admin/sessions/new" className="rounded-lg bg-brand px-3 py-1.5 text-sm font-bold text-white">
             + 새 정모

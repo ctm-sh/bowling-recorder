@@ -10,7 +10,7 @@ export default async function ResultsPage() {
 
   return (
     <>
-      <PageHeader title="결과" />
+      <PageHeader title="결과" back="/home" />
       <ul>
         {sessions.map((s) => (
           <li key={s.id} className="border-b border-line">

@@ -67,3 +67,15 @@ export async function playedGames(memberId: string): Promise<PlayedGame[]> {
     .filter((g): g is PlayedGame => g !== null)
     .sort((a, b) => a.date.localeCompare(b.date) || a.gameNo - b.gameNo);
 }
+
+/** 엑셀에서 가져온 이전 기록 (오래된 순). 날짜·팀 정보가 없다. */
+export async function legacyScores(memberId: string): Promise<number[]> {
+  const { data, error } = await db()
+    .from("scores")
+    .select("score")
+    .eq("member_id", memberId)
+    .is("game_id", null)
+    .order("seq");
+  if (error) throw error;
+  return data.map((s) => s.score as number);
+}

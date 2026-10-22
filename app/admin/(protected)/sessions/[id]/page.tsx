@@ -29,11 +29,7 @@ export default async function SessionPage({ params }: PageProps<"/admin/sessions
     <div className="pb-8">
       <PageHeader
         title={`${formatDate(session.date)} 정모`}
-        action={
-          <Link href="/admin/sessions" className="text-sm text-muted underline">
-            목록
-          </Link>
-        }
+        back="/admin/sessions"
       />
 
       <FeeForm action={updateFee.bind(null, session.id)} fee={session.fee_per_game} />
@@ -109,7 +105,12 @@ export default async function SessionPage({ params }: PageProps<"/admin/sessions
         </section>
       )}
 
-      {games.length === 0 && <DeleteSessionButton sessionId={session.id} />}
+      <DeleteSessionButton
+        sessionId={session.id}
+        gameCount={games.length}
+        scoreCount={games.reduce((n, g) => n + g.scoreCount, 0)}
+        closed={!!session.closed_at}
+      />
     </div>
   );
 }

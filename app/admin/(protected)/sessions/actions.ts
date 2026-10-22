@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { membersInGames } from "@/lib/db/sessions";
+import { getSettings } from "@/lib/db/settings";
+import { syncToSheet } from "@/lib/sheets/export";
 
 export type FormState = { error?: string };
 
@@ -66,14 +68,19 @@ export async function saveAttendance(sessionId: string, _prev: FormState, formDa
   redirect(`/admin/sessions/${sessionId}`);
 }
 
-/** 게임이 하나도 없는 정모만 삭제할 수 있다 (잘못 만든 정모 정리용) */
+/**
+ * 정모 삭제. 게임·팀·점수·참석이 함께 지워진다 (DB cascade).
+ * 마감된 정모였다면 구글 시트에서도 빠지도록 다시 내보낸다.
+ */
 export async function deleteSession(sessionId: string): Promise<FormState> {
   await requireAdmin();
-  const games = await db().from("games").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  if (games.error) throw games.error;
-  if ((games.count ?? 0) > 0) return { error: "게임 기록이 있는 정모는 삭제할 수 없어요." };
+  const session = await db().from("sessions").select("closed_at").eq("id", sessionId).maybeSingle();
+  if (session.error) throw session.error;
+  if (!session.data) redirect("/admin/sessions");
 
   const { error } = await db().from("sessions").delete().eq("id", sessionId);
   if (error) throw error;
+
+  if (session.data.closed_at && (await getSettings()).sheet_id) await syncToSheet();
   redirect("/admin/sessions");
 }

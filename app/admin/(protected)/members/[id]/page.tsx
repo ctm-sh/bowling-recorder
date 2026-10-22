@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MemberInsights } from "@/components/MemberInsights";
 import { PageHeader } from "@/components/PageHeader";
 import { tierLabel } from "@/components/TierBadge";
-import { playedGames } from "@/lib/db/memberRecord";
+import { legacyScores, playedGames } from "@/lib/db/memberRecord";
 import { getMember, listMembers } from "@/lib/db/members";
 import { getSettings } from "@/lib/db/settings";
 import { suggestTier, tierReferences } from "@/lib/domain/tiers";
@@ -15,7 +14,12 @@ export default async function MemberDetailPage({ params }: PageProps<"/admin/mem
   const { id } = await params;
   const data = await getMember(id);
   if (!data) notFound();
-  const [members, games, settings] = await Promise.all([listMembers(), playedGames(id), getSettings()]);
+  const [members, games, legacy, settings] = await Promise.all([
+    listMembers(),
+    playedGames(id),
+    legacyScores(id),
+    getSettings(),
+  ]);
   const { tierChanges } = data;
   const member = members.find((m) => m.id === id)!;
 
@@ -45,11 +49,7 @@ export default async function MemberDetailPage({ params }: PageProps<"/admin/mem
     <div className="pb-6">
       <PageHeader
         title={member.name}
-        action={
-          <Link href="/admin/members" className="text-sm text-muted underline">
-            목록
-          </Link>
-        }
+        back="/admin/members"
       />
 
       {suggestion.kind !== "none" && (
@@ -79,6 +79,8 @@ export default async function MemberDetailPage({ params }: PageProps<"/admin/mem
         recentGames={member.recentGames}
         recentN={settings.recent_n}
         insights={insights}
+        legacy={legacy}
+        profileHref={(m) => `/admin/members/${m}`}
         nameOf={(m) => byId.get(m)?.name ?? "?"}
         tierOf={(m) => byId.get(m)?.tier ?? null}
       />

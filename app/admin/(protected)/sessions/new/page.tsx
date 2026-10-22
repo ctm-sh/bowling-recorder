@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { db } from "@/lib/db/client";
 import { todayKST } from "@/lib/db/sessions";
@@ -12,11 +11,7 @@ export default async function NewSessionPage() {
     <>
       <PageHeader
         title="새 정모"
-        action={
-          <Link href="/admin/sessions" className="text-sm text-muted underline">
-            취소
-          </Link>
-        }
+        back="/admin/sessions"
       />
       <NewSessionForm today={todayKST()} defaultFee={data.default_fee} />
     </>

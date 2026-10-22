@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { getGameWithScores } from "@/lib/db/games";
@@ -29,11 +28,7 @@ export default async function ScoresPage({ params }: PageProps<"/admin/sessions/
     <>
       <PageHeader
         title={`${data.game.game_no}게임 점수`}
-        action={
-          <Link href={`/admin/sessions/${id}`} className="text-sm text-muted underline">
-            정모
-          </Link>
-        }
+        back={`/admin/sessions/${id}`}
       />
       <ScoreEntry
         sessionId={id}

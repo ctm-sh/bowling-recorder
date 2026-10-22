@@ -19,6 +19,7 @@ export default async function AdminMembersPage() {
     <>
       <PageHeader
         title="회원"
+        back="/admin"
         action={
           <Link href="/admin/members/new" className="rounded-lg bg-brand px-3 py-1.5 text-sm font-bold text-white">
             + 추가

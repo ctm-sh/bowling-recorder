@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDate } from "@/lib/format";
@@ -20,11 +19,7 @@ export default async function AttendancePage({ params }: PageProps<"/admin/sessi
     <>
       <PageHeader
         title={`${formatDate(data.session.date)} 참석 체크`}
-        action={
-          <Link href={`/admin/sessions/${id}`} className="text-sm text-muted underline">
-            취소
-          </Link>
-        }
+        back={`/admin/sessions/${id}`}
       />
       <AttendanceForm
         action={saveAttendance.bind(null, id)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { TierBadge } from "@/components/TierBadge";
 import { setMe } from "./me-actions";
@@ -10,6 +10,7 @@ export type Pickable = { id: string; name: string; tier: number | null };
 /** 처음 들어온 회원이 자기 이름을 고르는 화면 (이 기기에 기억) */
 export function WhoAmI({ members }: { members: Pickable[] }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -18,7 +19,8 @@ export function WhoAmI({ members }: { members: Pickable[] }) {
     startTransition(async () => {
       const result = await setMe(id);
       if (result.error) setError(result.error);
-      else router.refresh();
+      // ?pick=1 을 떼고 같은 화면을 내 기록으로 다시 그린다
+      else router.replace(pathname);
     });
   }
 

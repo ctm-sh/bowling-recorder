@@ -36,7 +36,7 @@ export default async function RankingPage({ searchParams }: PageProps<"/ranking"
 
   return (
     <div className="pb-6">
-      <PageHeader title="랭킹" />
+      <PageHeader title="랭킹" back="/home" />
       <nav className="sticky top-14 z-10 grid grid-cols-3 gap-1 border-b border-line bg-surface p-3 text-sm">
         {(Object.keys(SORTS) as Sort[]).map((s) => (
           <Link

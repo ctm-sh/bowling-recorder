@@ -21,11 +21,15 @@ export default async function GameResultPage({ params }: PageProps<"/admin/sessi
 
   return (
     <div className="min-h-dvh bg-[#0b0f1a]">
-      <header className="sticky top-0 z-10 flex h-14 items-center justify-between bg-black px-4 text-white">
-        <h1 className="text-lg font-bold">🎳 {result.game.game_no}게임 결과</h1>
-        <Link href={`/admin/sessions/${id}`} className="text-sm text-gray-400 underline">
-          정모
+      <header className="sticky top-0 z-10 flex h-14 items-center gap-1 bg-black px-2 text-white">
+        <Link
+          href={`/admin/sessions/${id}`}
+          aria-label="뒤로 가기"
+          className="flex size-10 items-center justify-center rounded-full text-2xl active:bg-white/10"
+        >
+          ‹
         </Link>
+        <h1 className="text-lg font-bold">🎳 {result.game.game_no}게임 결과</h1>
       </header>
 
       <GameBoard

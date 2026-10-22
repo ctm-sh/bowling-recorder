@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { PageHeader } from "@/components/PageHeader";
@@ -16,11 +15,7 @@ export default async function MemberPage({ params }: PageProps<"/members/[id]">)
     <div className="pb-6">
       <PageHeader
         title={`${member.name} 기록`}
-        action={
-          <Link href="/ranking" className="text-sm text-muted underline">
-            랭킹
-          </Link>
-        }
+        back="/ranking"
       />
       <MemberProfile member={member} members={members} />
     </div>
