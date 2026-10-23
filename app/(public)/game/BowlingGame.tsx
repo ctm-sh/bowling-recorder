@@ -15,7 +15,6 @@ import {
   MIN_WEIGHT,
   PIT_Y,
   aimPoint,
-  ballSpeed,
   knocked,
   launch,
   rack,
@@ -26,6 +25,7 @@ import {
   type World,
 } from "@/lib/minigame/physics";
 import { gameState } from "@/lib/minigame/score";
+import { readSwipe, swipeAim, type SwipePoint } from "@/lib/minigame/swipe";
 
 const STEP = 1 / 240;
 const BEST_KEY = "ttegul-minigame-best";
@@ -51,16 +51,8 @@ function subscribeBest(l: () => void) {
   return () => bestListeners.delete(l);
 }
 
-/** 한 번 던지기: 위치 → 방향 → 세기 → 회전 순서로 탭해서 멈춘다 */
-type Phase = "position" | "aim" | "power" | "spin" | "rolling" | "over";
-const STEPS: { key: Phase; label: string }[] = [
-  { key: "position", label: "위치" },
-  { key: "aim", label: "방향" },
-  { key: "power", label: "세기" },
-  { key: "spin", label: "회전" },
-];
-/** 게이지 한 번 왕복 시간 (초) */
-const PERIOD = { aim: 2.2, power: 1.6, spin: 2 };
+/** 던지기 전 → 굴러가는 중 → (10프레임 끝) */
+type Phase = "ready" | "rolling" | "over";
 
 const BALLS = [
   { name: "파랑", light: "#5b8cff", dark: "#0c2a7a", swirl: "rgba(200, 225, 255, 0.55)" },
@@ -70,12 +62,6 @@ const BALLS = [
   { name: "초록", light: "#4fd18b", dark: "#0b5a33", swirl: "rgba(230, 255, 200, 0.5)" },
 ];
 type BallStyle = (typeof BALLS)[number];
-
-/** 0 → 1 → 0 을 period초마다 반복 */
-function tri(seconds: number, period: number) {
-  const p = (seconds / period) % 1;
-  return p < 0.5 ? p * 2 : 2 - p * 2;
-}
 
 // ── 카메라: 볼러 뒤에서 레인을 내려다본다. 굴러가면 공을 따라간다. ──
 const CAM_START = -2.3;
@@ -411,67 +397,31 @@ function drawPinMap(ctx: CanvasRenderingContext2D, standing: Set<number>) {
   });
 }
 
-function roundBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+/** 손가락 자국 (밀어 올린 길) */
+function drawTrail(ctx: CanvasRenderingContext2D, points: SwipePoint[]) {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, r);
+  points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  ctx.stroke();
+  ctx.restore();
 }
 
-/** 오른쪽 세로 세기 게이지 */
-function drawPowerGauge(ctx: CanvasRenderingContext2D, c: Cam, value: number, active: boolean) {
-  const w = 16;
-  const x = c.width - w - 14;
-  const top = 64;
-  const h = c.height * 0.5;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
-  roundBox(ctx, x - 4, top - 4, w + 8, h + 8, 12);
-  ctx.fill();
-  const g = ctx.createLinearGradient(0, top + h, 0, top);
-  g.addColorStop(0, "#34c759");
-  g.addColorStop(0.55, "#ffcc00");
-  g.addColorStop(1, "#ff3b30");
-  ctx.fillStyle = g;
-  roundBox(ctx, x, top + h * (1 - value), w, h * value, 8);
-  ctx.fill();
-  ctx.fillStyle = active ? "#ffffff" : "rgba(255, 255, 255, 0.7)";
-  ctx.font = `700 11px "Noto Sans KR", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillText("세기", x + w / 2, top + h + 10);
-}
-
-/** 위쪽 가로 회전 게이지 (-1 왼쪽 ~ 1 오른쪽) */
-function drawSpinGauge(ctx: CanvasRenderingContext2D, c: Cam, value: number, active: boolean) {
-  const x0 = c.width * 0.46;
-  const x1 = c.width - 16;
-  const y = 30;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
-  roundBox(ctx, x0 - 6, y - 14, x1 - x0 + 12, 28, 14);
-  ctx.fill();
-  const g = ctx.createLinearGradient(x0, 0, x1, 0);
-  g.addColorStop(0, "#5ac8fa");
-  g.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
-  g.addColorStop(1, "#ff9f0a");
-  ctx.fillStyle = g;
-  roundBox(ctx, x0, y - 3, x1 - x0, 6, 3);
-  ctx.fill();
-  const mx = x0 + ((value + 1) / 2) * (x1 - x0);
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(mx, y, active ? 8 : 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.font = `700 10px "Noto Sans KR", sans-serif`;
-  ctx.textBaseline = "top";
-  ctx.textAlign = "left";
-  ctx.fillText("← 왼쪽으로", x0, y + 16);
-  ctx.textAlign = "right";
-  ctx.fillText("오른쪽으로 →", x1, y + 16);
+/** 화면 왼쪽 아래: 방금 던진 공의 세기·방향 */
+function describeThrow(aim: number, power: number) {
+  const dir = Math.round(aim * 10);
+  return `세기 ${Math.round(power * 9) + 1} · 방향 ${dir === 0 ? "가운데" : `${dir < 0 ? "왼쪽" : "오른쪽"} ${Math.abs(dir)}`}`;
 }
 
 export function BowlingGame() {
   const [rolls, setRolls] = useState<number[]>([]);
-  const [phase, setPhase] = useState<Phase>("position");
+  const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string>();
+  const [lastThrow, setLastThrow] = useState<string>();
   const [weight, setWeight] = useState(12);
   const [ballIndex, setBallIndex] = useState(0);
   const best = useSyncExternalStore(subscribeBest, readBest, () => null);
@@ -481,12 +431,8 @@ export function BowlingGame() {
   const pinsRef = useRef<Pin[]>(rack());
   const worldRef = useRef<World | null>(null);
   const rollsRef = useRef<number[]>([]);
-  const phaseRef = useRef<Phase>("position");
-  const phaseStartRef = useRef(0);
+  const phaseRef = useRef<Phase>("ready");
   const startXRef = useRef(0);
-  const aimRef = useRef(0);
-  const powerRef = useRef(0);
-  const spinRef = useRef(0);
   const ballStyleRef = useRef<BallStyle>(BALLS[0]);
   const weightRef = useRef(12);
   const fallenRef = useRef(new Map<number, { angle: number; spin: number }>());
@@ -499,47 +445,10 @@ export function BowlingGame() {
 
   function go(next: Phase) {
     phaseRef.current = next;
-    phaseStartRef.current = performance.now();
     setPhase(next);
   }
-
-  /** 지금 단계의 게이지를 멈추고 다음 단계로 (마지막이면 공을 굴린다) */
-  function lock() {
-    const now = performance.now();
-    const t = (now - phaseStartRef.current) / 1000;
-    switch (phaseRef.current) {
-      case "position":
-        go("aim");
-        break;
-      case "aim":
-        aimRef.current = tri(t, PERIOD.aim) * 2 - 1;
-        go("power");
-        break;
-      case "power":
-        powerRef.current = tri(t, PERIOD.power);
-        go("spin");
-        break;
-      case "spin":
-        spinRef.current = tri(t, PERIOD.spin) * 2 - 1;
-        worldRef.current = launch(
-          {
-            startX: startXRef.current,
-            aim: aimRef.current,
-            hook: spinRef.current,
-            power: powerRef.current,
-            weight: weightRef.current,
-          },
-          pinsRef.current,
-        );
-        setMessage(undefined);
-        go("rolling");
-        break;
-    }
-  }
-  const lockRef = useRef(lock);
-  useEffect(() => {
-    lockRef.current = lock;
-  });
+  const goRef = useRef(go);
+  const setLastThrowRef = useRef(setLastThrow);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -560,28 +469,55 @@ export function BowlingGame() {
     const observer = new ResizeObserver(resize);
     observer.observe(wrap);
 
-    // 위치 단계: 레인을 좌우로 끌어 출발 위치를 정한다
-    let dragging = false;
-    const toWorldX = (clientX: number) => {
+    // 공 드래그: 옆으로 끌면 공이 따라오고, 위로 밀어 올리고 떼면 던진다
+    let gesture: { id: number; startX: number; fromX: number; swipe: SwipePoint[] | null } | null = null;
+    let downAt: SwipePoint | null = null;
+    const local = (e: PointerEvent): SwipePoint => {
       const rect = canvas.getBoundingClientRect();
-      const d = BALL_START_Y - cam.y;
-      return ((clientX - rect.left - cam.cx) * d) / cam.f;
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: performance.now() };
     };
+    /** 손가락 x를 공이 있는 거리의 레인 위치로 */
+    const worldDx = (px: number) => (px * (BALL_START_Y - cam.y)) / cam.f;
+    const clampX = (x: number) => Math.max(-MAX_START, Math.min(MAX_START, x));
+
     const onDown = (e: PointerEvent) => {
-      if (phaseRef.current === "position") {
-        dragging = true;
-        canvas.setPointerCapture(e.pointerId);
-        startXRef.current = Math.max(-MAX_START, Math.min(MAX_START, toWorldX(e.clientX)));
-      } else if (phaseRef.current === "aim" || phaseRef.current === "power" || phaseRef.current === "spin") {
-        lockRef.current();
-      }
+      if (phaseRef.current !== "ready" || gesture) return;
+      canvas.setPointerCapture(e.pointerId);
+      const p = local(e);
+      gesture = { id: e.pointerId, startX: startXRef.current, fromX: p.x, swipe: null };
+      downAt = p;
     };
     const onMove = (e: PointerEvent) => {
-      if (!dragging || phaseRef.current !== "position") return;
-      startXRef.current = Math.max(-MAX_START, Math.min(MAX_START, toWorldX(e.clientX)));
+      if (!gesture || e.pointerId !== gesture.id || !downAt) return;
+      const p = local(e);
+      if (!gesture.swipe) {
+        // 위로 조금이라도 밀기 시작하면 그때부터 던지는 동작
+        if (downAt.y - p.y > 18) {
+          gesture.swipe = [p];
+        } else {
+          startXRef.current = clampX(gesture.startX + worldDx(p.x - gesture.fromX));
+        }
+      } else {
+        gesture.swipe.push(p);
+        if (gesture.swipe.length > 120) gesture.swipe.shift();
+      }
     };
-    const onUp = () => {
-      dragging = false;
+    const onUp = (e: PointerEvent) => {
+      if (!gesture || e.pointerId !== gesture.id) return;
+      const swipe = gesture.swipe;
+      gesture = null;
+      downAt = null;
+      if (!swipe || e.type === "pointercancel") return;
+      swipe.push(local(e));
+      const read = readSwipe(swipe, cam.height);
+      if (!read) return;
+      worldRef.current = launch(
+        { startX: startXRef.current, aim: read.aim, hook: 0, power: read.power, weight: weightRef.current },
+        pinsRef.current,
+      );
+      setLastThrowRef.current(describeThrow(read.aim, read.power));
+      setMessage(undefined);
+      goRef.current("rolling");
     };
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointermove", onMove);
@@ -609,16 +545,15 @@ export function BowlingGame() {
       timerRef.current = setTimeout(() => {
         fallenRef.current.clear();
         worldRef.current = null;
+        setMessage(undefined);
         if (state.over) {
           pinsRef.current = w.pins;
           saveBest(state.frames[9].total ?? 0);
-          setMessage(undefined);
-          go("over");
+          goRef.current("over");
           return;
         }
         pinsRef.current = state.freshRack ? rack() : w.pins.filter((p) => !p.down && !p.gone);
-        setMessage(undefined);
-        go("position");
+        goRef.current("ready");
       }, 1400);
     }
 
@@ -634,8 +569,6 @@ export function BowlingGame() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const w = worldRef.current;
-      const phase = phaseRef.current;
-      const t = (now - phaseStartRef.current) / 1000;
 
       if (w) {
         if (w !== running) {
@@ -664,6 +597,15 @@ export function BowlingGame() {
       const pins = w ? w.pins : pinsRef.current;
       drawLane(ctx, cam);
 
+      // 밀어 올리는 중이면 지금 방향을 바닥에 화살표로 보여준다
+      const swipe = gesture?.swipe;
+      if (swipe && swipe.length > 1) {
+        // 던질 만큼 밀었으면 노란색, 아직이면 흐린 흰색
+        const ready = readSwipe(swipe, cam.height) !== null;
+        const aim = swipeAim(swipe[0], swipe[swipe.length - 1]);
+        drawArrow(ctx, cam, startXRef.current, aim, ready ? "rgba(255, 204, 0, 0.85)" : "rgba(255, 255, 255, 0.4)");
+      }
+
       // 먼 것부터 그린다
       const ball = w ? w.ball : { x: startXRef.current, y: BALL_START_Y };
       const items: { y: number; draw: () => void }[] = [];
@@ -675,8 +617,7 @@ export function BowlingGame() {
             f = { angle: Math.atan2(p.vy, p.vx), spin: (Math.random() - 0.5) * 10 };
             fallenRef.current.set(p.id, f);
           }
-          const speed = Math.hypot(p.vx, p.vy);
-          f.angle += f.spin * dt * Math.min(1, speed);
+          f.angle += f.spin * dt * Math.min(1, Math.hypot(p.vx, p.vy));
           const angle = f.angle;
           items.push({ y: p.y, draw: () => drawFallen(ctx, cam, p.x, p.y, angle) });
         } else {
@@ -693,42 +634,34 @@ export function BowlingGame() {
         const style = ballStyleRef.current;
         items.push({ y: ball.y, draw: () => drawBall(ctx, cam, ball, style, roll) });
       }
-      // 겨냥 화살표는 공보다 먼저(아래에) 그린다
-      if (phase === "aim" || phase === "power" || phase === "spin") {
-        const aim = phase === "aim" ? tri(t, PERIOD.aim) * 2 - 1 : aimRef.current;
-        drawArrow(
-          ctx,
-          cam,
-          startXRef.current,
-          aim,
-          phase === "aim" ? "rgba(255, 204, 0, 0.9)" : "rgba(255, 204, 0, 0.55)",
-        );
-      }
       items.sort((a, b) => b.y - a.y).forEach((i) => i.draw());
 
-      // 위치 단계: 공 양옆 화살표
-      if (phase === "position") {
+      if (swipe) drawTrail(ctx, swipe);
+
+      // 던지기 전: 공 위로 밀어 올리라는 표시
+      if (phaseRef.current === "ready" && !swipe) {
         const p = project(cam, startXRef.current, BALL_START_Y, BALL_R);
         const r = BALL_R * p.k;
-        const pulse = 4 * Math.sin(now / 200);
+        const bob = 6 * Math.sin(now / 250);
         ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-        for (const side of [-1, 1]) {
-          const x = p.x + side * (r + 16 + pulse);
+        for (const [i, alpha] of [
+          [0, 0.9],
+          [1, 0.55],
+        ]) {
+          ctx.globalAlpha = alpha;
+          const y = p.y - r - 18 - i * 16 + bob;
           ctx.beginPath();
-          ctx.moveTo(x + side * 10, p.y);
-          ctx.lineTo(x, p.y - 9);
-          ctx.lineTo(x, p.y + 9);
+          ctx.moveTo(p.x, y - 9);
+          ctx.lineTo(p.x - 12, y + 3);
+          ctx.lineTo(p.x + 12, y + 3);
           ctx.closePath();
           ctx.fill();
         }
+        ctx.globalAlpha = 1;
       }
 
       const standing = new Set(pins.filter((p) => !p.down && !p.gone).map((p) => p.id));
       drawPinMap(ctx, standing);
-      if (phase === "power" || phase === "spin") {
-        drawPowerGauge(ctx, cam, phase === "power" ? tri(t, PERIOD.power) : powerRef.current, phase === "power");
-      }
-      if (phase === "spin") drawSpinGauge(ctx, cam, tri(t, PERIOD.spin) * 2 - 1, true);
 
       raf = requestAnimationFrame(frame);
     };
@@ -753,13 +686,13 @@ export function BowlingGame() {
     fallenRef.current.clear();
     setRolls([]);
     setMessage(undefined);
-    go("position");
+    setLastThrow(undefined);
+    go("ready");
   }
 
   const state = gameState(rolls);
   const total = [...state.frames].reverse().find((f) => f.total !== null)?.total ?? 0;
-  const choosing = phase === "position";
-  const stepIndex = STEPS.findIndex((s) => s.key === phase);
+  const choosing = phase === "ready";
 
   return (
     <div className="flex flex-col gap-3 px-5 pt-4">
@@ -769,12 +702,17 @@ export function BowlingGame() {
         <canvas
           ref={canvasRef}
           className="block w-full touch-none select-none"
-          aria-label="볼링 레인. 위치를 끌어서 정하고, 화면을 눌러 방향·세기·회전을 멈추세요"
+          aria-label="볼링 레인. 공을 옆으로 끌어 위치를 정하고, 위로 밀어 올려 던지세요"
           role="img"
         />
         {message && (
           <div className="pointer-events-none absolute inset-x-0 top-[34%] flex justify-center">
             <span className="rounded-full bg-black/70 px-6 py-2.5 text-2xl font-bold text-white">{message}</span>
+          </div>
+        )}
+        {lastThrow && (
+          <div className="pointer-events-none absolute bottom-2 left-3 text-xs font-semibold text-white/75">
+            {lastThrow}
           </div>
         )}
         <div className="pointer-events-none absolute right-3 bottom-2 text-right text-xs font-semibold text-white/75">
@@ -783,35 +721,14 @@ export function BowlingGame() {
         </div>
       </div>
 
-      {/* 단계 표시 */}
-      <ol className="flex items-center justify-center gap-1.5 text-[13px]">
-        {STEPS.map((s, i) => (
-          <li key={s.key} className="flex items-center gap-1.5">
-            {i > 0 && <span className="text-muted">›</span>}
-            <span
-              className={`rounded-full px-2.5 py-1 ${
-                s.key === phase
-                  ? "bg-foreground font-semibold text-white"
-                  : stepIndex > i || phase === "rolling"
-                    ? "text-foreground"
-                    : "text-muted"
-              }`}
-            >
-              {i + 1} {s.label}
-            </span>
-          </li>
-        ))}
-      </ol>
       <p className="min-h-10 px-1 text-center text-[13px] leading-[1.5] text-muted">
-        {phase === "position" && "레인을 좌우로 끌어 공을 놓을 자리를 정하세요. 무거운 공은 느리지만 핀을 세게 쳐요."}
-        {phase === "aim" && "노란 화살표가 원하는 방향을 가리킬 때 화면을 누르세요."}
-        {phase === "power" && "오른쪽 게이지가 원하는 만큼 찼을 때 누르세요. 약할수록 더 휘어요."}
-        {phase === "spin" && "위쪽 점이 원하는 쪽에 왔을 때 누르면 공이 굴러가요. 휘는 건 레인 뒤쪽부터예요."}
+        {phase === "ready" &&
+          "공을 옆으로 끌어 자리를 잡고, 위로 밀어 올려 던지세요. 기울여 밀면 그 방향으로, 빠르게 밀수록 세게 가요."}
         {phase === "rolling" && "굴러가는 중…"}
         {phase === "over" && "수고했어요! 한 판 더 해볼까요?"}
       </p>
 
-      {/* 공 고르기 (위치 단계에서만) */}
+      {/* 공 고르기 (던지기 전에만) */}
       <div className="grid grid-cols-2 gap-2.5">
         <Chooser
           label="공 무게"
@@ -819,7 +736,7 @@ export function BowlingGame() {
           disabled={!choosing}
           onPrev={() => setWeight((w) => Math.max(MIN_WEIGHT, w - 1))}
           onNext={() => setWeight((w) => Math.min(MAX_WEIGHT, w + 1))}
-          note={`${Math.round(ballSpeed(0.7, weight) * 3.6)}km/h 정도`}
+          note="무거우면 느리지만 세게"
         />
         <Chooser
           label="공 색"
@@ -841,27 +758,17 @@ export function BowlingGame() {
         />
       </div>
 
-      <BottomBar>
-        {phase === "over" ? (
-          <>
-            <div className="text-center text-[15px]">
-              최종 <span className="text-xl font-bold">{total}</span>점
-              {best !== null && total >= best && total > 0 ? " · 이 기기 최고 기록!" : ""}
-            </div>
-            <button type="button" onClick={restart} className={primaryButton}>
-              새 게임
-            </button>
-          </>
-        ) : (
-          <button type="button" onClick={lock} disabled={phase === "rolling"} className={primaryButton}>
-            {phase === "position" && "이 자리에서 던지기"}
-            {phase === "aim" && "방향 멈추기"}
-            {phase === "power" && "세기 멈추기"}
-            {phase === "spin" && "회전 멈추고 굴리기"}
-            {phase === "rolling" && "굴러가는 중…"}
+      {phase === "over" && (
+        <BottomBar>
+          <div className="text-center text-[15px]">
+            최종 <span className="text-xl font-bold">{total}</span>점
+            {best !== null && total >= best && total > 0 ? " · 이 기기 최고 기록!" : ""}
+          </div>
+          <button type="button" onClick={restart} className={primaryButton}>
+            새 게임
           </button>
-        )}
-      </BottomBar>
+        </BottomBar>
+      )}
     </div>
   );
 }
