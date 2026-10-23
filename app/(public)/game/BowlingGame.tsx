@@ -1,9 +1,11 @@
 "use client";
 
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BottomBar } from "@/components/Flow";
 import { Icon } from "@/components/Icon";
-import { primaryButton } from "@/components/ui";
+import { Segmented, primaryButton } from "@/components/ui";
 import {
   BALL_R,
   BALL_START_Y,
@@ -26,30 +28,35 @@ import {
 } from "@/lib/minigame/physics";
 import { gameState } from "@/lib/minigame/score";
 import { readSwipe, swipeAim, type SwipePoint } from "@/lib/minigame/swipe";
+import { saveMinigameScore } from "./actions";
 
 const STEP = 1 / 240;
-const BEST_KEY = "ttegul-minigame-best";
+const THEME_KEY = "ttegul-minigame-theme";
 
-// 이 기기의 최고 점수 (localStorage). 막혀 있으면 그냥 없는 것으로 본다.
-function readBest() {
+// 볼링장 분위기는 이 기기에만 기억한다 (localStorage). 저장이 막혀 있으면 이번 화면에서만 바뀐다.
+let memoryTheme: ThemeKey = "bright";
+const themeListeners = new Set<() => void>();
+function readTheme(): ThemeKey {
   try {
-    const v = Number(localStorage.getItem(BEST_KEY));
-    return Number.isFinite(v) && v > 0 ? v : null;
-  } catch {
-    return null;
-  }
-}
-const bestListeners = new Set<() => void>();
-function saveBest(score: number) {
-  try {
-    if (score > (readBest() ?? -1)) localStorage.setItem(BEST_KEY, String(score));
+    const v = localStorage.getItem(THEME_KEY);
+    if (v === "rock" || v === "bright") return v;
   } catch {}
-  bestListeners.forEach((l) => l());
+  return memoryTheme;
 }
-function subscribeBest(l: () => void) {
-  bestListeners.add(l);
-  return () => bestListeners.delete(l);
+function saveTheme(key: ThemeKey) {
+  memoryTheme = key;
+  try {
+    localStorage.setItem(THEME_KEY, key);
+  } catch {}
+  themeListeners.forEach((l) => l());
 }
+function subscribeTheme(l: () => void) {
+  themeListeners.add(l);
+  return () => themeListeners.delete(l);
+}
+
+/** before: 이번 게임 전 내 최고 점수 (기록 갱신 표시용) */
+type Saved = { error?: string; score?: number; best?: number; rank?: number; before?: number | null };
 
 /** 던지기 전 → 굴러가는 중 → (10프레임 끝) */
 type Phase = "ready" | "rolling" | "over";
@@ -116,49 +123,173 @@ function wall(ctx: CanvasRenderingContext2D, c: Cam, x: number, y0: number, y1: 
   ctx.fill();
 }
 
-function drawLane(ctx: CanvasRenderingContext2D, c: Cam) {
+// ── 볼링장 분위기: 밝은 볼링장 / 락 볼링장(어두운 조명 + 네온) ──
+type Theme = {
+  sky: [string, string];
+  floor: string;
+  neighbor: string;
+  gutter: string;
+  gutterInner: string;
+  capping: string;
+  cappingLine: string;
+  wood: [string, string, string];
+  oil: string;
+  deck: string;
+  boards: string;
+  foul: string;
+  arrows: string;
+  pit: string;
+  wall: string;
+  mask: string;
+  maskLine: string;
+  maskText: string;
+  logo: string;
+  pin: [string, string, string];
+  pinStripe: string;
+  fallen: string;
+  shadow: string;
+  /** 네온 빛 번짐 + 움직이는 조명 */
+  party: boolean;
+};
+
+const THEMES = {
+  bright: {
+    sky: ["#e9eef4", "#c4ccd6"],
+    floor: "#c9a26b",
+    neighbor: "#e2c08b",
+    gutter: "#9aa1aa",
+    gutterInner: "#7f868f",
+    capping: "#c3c9d1",
+    cappingLine: "#f4f6f9",
+    wood: ["#dcb57d", "#ecce9c", "#f8e8c6"],
+    oil: "rgba(255, 255, 255, 0.16)",
+    deck: "rgba(255, 250, 235, 0.5)",
+    boards: "rgba(110, 70, 25, 0.13)",
+    foul: "#c0392b",
+    arrows: "rgba(70, 40, 15, 0.6)",
+    pit: "#1b1d22",
+    wall: "#a7afb9",
+    mask: "#ffffff",
+    maskLine: "#0071e3",
+    maskText: "#1d1d1f",
+    logo: "떼굴 BOWLING",
+    pin: ["#d9dce2", "#ffffff", "#c4c8cf"],
+    pinStripe: "#e0353b",
+    fallen: "#f2f3f5",
+    shadow: "rgba(0, 0, 0, 0.18)",
+    party: false,
+  },
+  rock: {
+    sky: ["#04010b", "#1d0638"],
+    floor: "#0c0716",
+    neighbor: "#1a1030",
+    gutter: "#17112a",
+    gutterInner: "#0b0716",
+    capping: "#261a3f",
+    cappingLine: "#ff2bd6",
+    wood: ["#160f2b", "#22173f", "#2d1f55"],
+    oil: "rgba(140, 100, 255, 0.08)",
+    deck: "rgba(120, 80, 255, 0.16)",
+    boards: "rgba(150, 110, 255, 0.10)",
+    foul: "#ff2bd6",
+    arrows: "#22e6ff",
+    pit: "#000000",
+    wall: "#140b26",
+    mask: "#0a0514",
+    maskLine: "#22e6ff",
+    maskText: "#ff4fe0",
+    logo: "떼굴 ROCK BOWLING",
+    pin: ["#d9ccff", "#ffffff", "#bba8f5"],
+    pinStripe: "#ff2bd6",
+    fallen: "#e6dcff",
+    shadow: "rgba(0, 0, 0, 0.45)",
+    party: true,
+  },
+} satisfies Record<string, Theme>;
+type ThemeKey = keyof typeof THEMES;
+
+/** 빛 번짐 켜기 (락 볼링장만) */
+function glow(ctx: CanvasRenderingContext2D, t: Theme, color: string, blur: number) {
+  if (!t.party) return;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur;
+}
+function noGlow(ctx: CanvasRenderingContext2D) {
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+}
+
+const NEON = ["#ff2bd6", "#22e6ff", "#b6ff3b", "#ffd60a", "#8f5bff"];
+
+function drawLane(ctx: CanvasRenderingContext2D, c: Cam, t: Theme, now: number) {
   const { width, height, horizon } = c;
   // 천장·뒤 벽
   const sky = ctx.createLinearGradient(0, 0, 0, horizon + 20);
-  sky.addColorStop(0, "#0e1017");
-  sky.addColorStop(1, "#262a36");
+  sky.addColorStop(0, t.sky[0]);
+  sky.addColorStop(1, t.sky[1]);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
 
+  // 락: 천장에서 흔들리는 조명 빔
+  if (t.party) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 3; i++) {
+      const sway = Math.sin(now / 1400 + i * 2.1);
+      const topX = width * (0.2 + i * 0.3);
+      const footX = topX + sway * width * 0.35;
+      const footY = horizon + height * 0.35;
+      const beam = ctx.createLinearGradient(topX, 0, footX, footY);
+      beam.addColorStop(0, `${NEON[i]}55`);
+      beam.addColorStop(1, `${NEON[i]}00`);
+      ctx.fillStyle = beam;
+      ctx.beginPath();
+      ctx.moveTo(topX - 4, 0);
+      ctx.lineTo(topX + 4, 0);
+      ctx.lineTo(footX + width * 0.14, footY);
+      ctx.lineTo(footX - width * 0.14, footY);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   const far = PIT_Y + 0.6;
   // 옆 레인들 (바닥)
-  quad(ctx, c, -6, 6, -3, far, "#b48a55");
+  quad(ctx, c, -6, 6, -3, far, t.floor);
   for (const side of [-1, 1]) {
     const inner = EDGE + GUTTER + 0.22;
     const x0 = side < 0 ? -inner - LANE_WIDTH : inner;
-    quad(ctx, c, x0, x0 + LANE_WIDTH, -3, LANE_LENGTH + 0.95, "#d9b47c");
+    quad(ctx, c, x0, x0 + LANE_WIDTH, -3, LANE_LENGTH + 0.95, t.neighbor);
     const g0 = side < 0 ? x0 - GUTTER : x0 + LANE_WIDTH;
-    quad(ctx, c, g0, g0 + GUTTER, -3, far, "#80868f");
+    quad(ctx, c, g0, g0 + GUTTER, -3, far, t.gutter);
     // 공 받침대(캐핑)
     const cap0 = side < 0 ? -inner : EDGE + GUTTER;
-    quad(ctx, c, cap0, cap0 + 0.22, -3, far, "#aeb4bd", 0.03);
-    quad(ctx, c, cap0 + 0.08, cap0 + 0.14, -3, far, "#e8ecf1", 0.031);
+    quad(ctx, c, cap0, cap0 + 0.22, -3, far, t.capping, 0.03);
+    glow(ctx, t, t.cappingLine, 10);
+    quad(ctx, c, cap0 + 0.08, cap0 + 0.14, -3, far, t.cappingLine, 0.031);
+    noGlow(ctx);
   }
   // 거터 (안쪽이 더 어둡게)
   for (const side of [-1, 1]) {
     const g0 = side < 0 ? -EDGE - GUTTER : EDGE;
-    quad(ctx, c, g0, g0 + GUTTER, -3, far, "#8b9199");
-    quad(ctx, c, g0 + GUTTER * 0.25, g0 + GUTTER * 0.75, -3, far, "#6c727b");
+    quad(ctx, c, g0, g0 + GUTTER, -3, far, t.gutter);
+    quad(ctx, c, g0 + GUTTER * 0.25, g0 + GUTTER * 0.75, -3, far, t.gutterInner);
   }
   // 레인 나무
   const nearY = project(c, 0, c.y + NEAR).y;
   const farY = project(c, 0, LANE_LENGTH + 0.95).y;
   const wood = ctx.createLinearGradient(0, nearY, 0, farY);
-  wood.addColorStop(0, "#d6ad74");
-  wood.addColorStop(0.5, "#e8c792");
-  wood.addColorStop(1, "#f6e2bb");
+  wood.addColorStop(0, t.wood[0]);
+  wood.addColorStop(0.5, t.wood[1]);
+  wood.addColorStop(1, t.wood[2]);
   quad(ctx, c, -EDGE, EDGE, -3, LANE_LENGTH + 0.95, wood);
   // 기름 반사광
-  quad(ctx, c, -EDGE * 0.7, EDGE * 0.7, 2, 11, "rgba(255, 255, 255, 0.10)");
+  quad(ctx, c, -EDGE * 0.7, EDGE * 0.7, 2, 11, t.oil);
   // 핀 데크
-  quad(ctx, c, -EDGE, EDGE, LANE_LENGTH - 0.35, LANE_LENGTH + 0.95, "rgba(255, 248, 230, 0.45)");
+  quad(ctx, c, -EDGE, EDGE, LANE_LENGTH - 0.35, LANE_LENGTH + 0.95, t.deck);
   // 판자 줄
-  ctx.strokeStyle = "rgba(110, 70, 25, 0.13)";
+  ctx.strokeStyle = t.boards;
   ctx.lineWidth = 1;
   const y0 = Math.max(-3, c.y + NEAR);
   for (let b = 1; b < 39; b++) {
@@ -170,10 +301,38 @@ function drawLane(ctx: CanvasRenderingContext2D, c: Cam) {
     ctx.lineTo(e.x, e.y);
     ctx.stroke();
   }
+
+  // 락: 레인 위를 돌아다니는 색 조명
+  if (t.party) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 4; i++) {
+      const x = Math.sin(now / 900 + i * 1.7) * EDGE * 0.8;
+      const y = c.y + 3 + ((now / 400 + i * 5) % 16);
+      if (y > LANE_LENGTH + 0.9 || y - c.y < NEAR + 0.5) continue;
+      const p = project(c, x, y);
+      const r = 0.45 * p.k;
+      const spot = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      spot.addColorStop(0, `${NEON[i]}66`);
+      spot.addColorStop(1, `${NEON[i]}00`);
+      ctx.fillStyle = spot;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, r, r * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    // 레인 양쪽 끝 네온 줄
+    glow(ctx, t, "#22e6ff", 12);
+    quad(ctx, c, -EDGE - 0.012, -EDGE + 0.006, -3, LANE_LENGTH + 0.95, "#22e6ff");
+    quad(ctx, c, EDGE - 0.006, EDGE + 0.012, -3, LANE_LENGTH + 0.95, "#22e6ff");
+    noGlow(ctx);
+  }
+
   // 파울라인
-  quad(ctx, c, -EDGE, EDGE, -0.015, 0.015, "#c0392b");
+  glow(ctx, t, t.foul, 12);
+  quad(ctx, c, -EDGE, EDGE, -0.015, 0.015, t.foul);
   // 스팟 점 + 화살표
-  ctx.fillStyle = "rgba(70, 40, 15, 0.6)";
+  glow(ctx, t, t.arrows, 10);
   for (let i = 0; i < 7; i++) {
     const x = -EDGE + ((5 + i * 5) * LANE_WIDTH) / 39;
     const y = 3.7 + (3 - Math.abs(i - 3)) * 0.3;
@@ -181,6 +340,8 @@ function drawLane(ctx: CanvasRenderingContext2D, c: Cam) {
     const tip = project(c, x, y + 0.3);
     const l = project(c, x - 0.025, y);
     const r = project(c, x + 0.025, y);
+    // 락에서는 화살표가 차례로 색이 바뀐다
+    ctx.fillStyle = t.party ? NEON[(i + Math.floor(now / 500)) % NEON.length] : t.arrows;
     ctx.beginPath();
     ctx.moveTo(tip.x, tip.y);
     ctx.lineTo(l.x, l.y);
@@ -188,31 +349,47 @@ function drawLane(ctx: CanvasRenderingContext2D, c: Cam) {
     ctx.closePath();
     ctx.fill();
   }
+  noGlow(ctx);
   // 피트(검은 구덩이)와 양옆 벽
-  quad(ctx, c, -EDGE - GUTTER, EDGE + GUTTER, LANE_LENGTH + 0.95, far, "#07080a");
+  quad(ctx, c, -EDGE - GUTTER, EDGE + GUTTER, LANE_LENGTH + 0.95, far, t.pit);
   for (const side of [-1, 1]) {
-    wall(ctx, c, side * (EDGE + GUTTER), LANE_LENGTH - 0.6, far, 0.55, "#2b2f38");
+    wall(ctx, c, side * (EDGE + GUTTER), LANE_LENGTH - 0.6, far, 0.55, t.wall);
   }
   // 뒤 가림막 (떼굴 로고)
   const bl = project(c, -EDGE - GUTTER - 0.3, far, 0.55);
   const tr = project(c, EDGE + GUTTER + 0.3, far, 1.5);
-  ctx.fillStyle = "#151821";
+  ctx.fillStyle = t.mask;
   ctx.fillRect(bl.x, tr.y, tr.x - bl.x, bl.y - tr.y);
-  ctx.fillStyle = "#0071e3";
+  glow(ctx, t, t.maskLine, 10);
+  ctx.fillStyle = t.maskLine;
   ctx.fillRect(bl.x, bl.y - 2, tr.x - bl.x, 2);
   const k = project(c, 0, far).k;
-  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  ctx.fillStyle = t.maskText;
+  glow(ctx, t, t.maskText, 14);
   ctx.font = `700 ${Math.min(18, Math.max(7, k * 0.32))}px Inter, "Noto Sans KR", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("떼굴 BOWLING", (bl.x + tr.x) / 2, (bl.y + tr.y) / 2);
+  ctx.fillText(t.logo, (bl.x + tr.x) / 2, (bl.y + tr.y) / 2);
+  noGlow(ctx);
+  // 락: 가림막 위 반짝이는 디스코 전구
+  if (t.party) {
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const x = bl.x + ((i + 0.5) / n) * (tr.x - bl.x);
+      const on = (i + Math.floor(now / 180)) % 3 === 0;
+      ctx.fillStyle = on ? NEON[i % NEON.length] : "rgba(255, 255, 255, 0.15)";
+      ctx.beginPath();
+      ctx.arc(x, tr.y + 4, Math.max(1.5, k * 0.025), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 /** 서 있는 핀 (실루엣) */
-function drawPin(ctx: CanvasRenderingContext2D, x: number, y: number, k: number) {
+function drawPin(ctx: CanvasRenderingContext2D, x: number, y: number, k: number, t: Theme) {
   const s = k;
   // 그림자
-  ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+  ctx.fillStyle = t.shadow;
   ctx.beginPath();
   ctx.ellipse(x + 0.02 * s, y, 0.075 * s, 0.022 * s, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -231,22 +408,24 @@ function drawPin(ctx: CanvasRenderingContext2D, x: number, y: number, k: number)
   ctx.quadraticCurveTo(x + half(0.13), at(0.06), x + half(0.05), at(0));
   ctx.closePath();
   const g = ctx.createLinearGradient(x - half(0.121), 0, x + half(0.121), 0);
-  g.addColorStop(0, "#d9dce2");
-  g.addColorStop(0.35, "#ffffff");
-  g.addColorStop(1, "#c4c8cf");
+  g.addColorStop(0, t.pin[0]);
+  g.addColorStop(0.35, t.pin[1]);
+  g.addColorStop(1, t.pin[2]);
   ctx.fillStyle = g;
+  glow(ctx, t, "rgba(190, 150, 255, 0.9)", 12);
   ctx.fill();
-  // 목의 빨간 줄 두 개
+  noGlow(ctx);
+  // 목의 줄 두 개
   ctx.save();
   ctx.clip();
-  ctx.fillStyle = "#e0353b";
+  ctx.fillStyle = t.pinStripe;
   ctx.fillRect(x - half(0.13), at(0.262), 0.13 * s, 0.011 * s);
   ctx.fillRect(x - half(0.13), at(0.236), 0.13 * s, 0.011 * s);
   ctx.restore();
 }
 
 /** 쓰러진 핀: 바닥에 누운 막대 (angle은 바닥 기준 방향) */
-function drawFallen(ctx: CanvasRenderingContext2D, c: Cam, x: number, y: number, angle: number) {
+function drawFallen(ctx: CanvasRenderingContext2D, c: Cam, x: number, y: number, angle: number, t: Theme) {
   const len = 0.36;
   const hx = x + Math.cos(angle) * len;
   const hy = y + Math.sin(angle) * len;
@@ -255,24 +434,26 @@ function drawFallen(ctx: CanvasRenderingContext2D, c: Cam, x: number, y: number,
   const head = project(c, hx, hy, 0.04);
   const k = (base.k + head.k) / 2;
   ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+  ctx.strokeStyle = t.shadow;
   ctx.lineWidth = 0.11 * k;
   ctx.beginPath();
   ctx.moveTo(base.x + 2, base.y + 0.05 * k);
   ctx.lineTo(head.x + 2, head.y + 0.05 * k);
   ctx.stroke();
-  ctx.strokeStyle = "#f2f3f5";
+  ctx.strokeStyle = t.fallen;
   ctx.lineWidth = 0.1 * k;
+  glow(ctx, t, "rgba(190, 150, 255, 0.9)", 10);
   ctx.beginPath();
   ctx.moveTo(base.x, base.y);
   ctx.lineTo(head.x, head.y);
   ctx.stroke();
+  noGlow(ctx);
   // 목 줄
   const mx = base.x + (head.x - base.x) * 0.66;
   const my = base.y + (head.y - base.y) * 0.66;
   const nx = base.x + (head.x - base.x) * 0.72;
   const ny = base.y + (head.y - base.y) * 0.72;
-  ctx.strokeStyle = "#e0353b";
+  ctx.strokeStyle = t.pinStripe;
   ctx.lineCap = "butt";
   ctx.lineWidth = 0.075 * k;
   ctx.beginPath();
@@ -281,12 +462,19 @@ function drawFallen(ctx: CanvasRenderingContext2D, c: Cam, x: number, y: number,
   ctx.stroke();
 }
 
-function drawBall(ctx: CanvasRenderingContext2D, c: Cam, ball: Pick<Ball, "x" | "y">, style: BallStyle, roll: number) {
+function drawBall(
+  ctx: CanvasRenderingContext2D,
+  c: Cam,
+  ball: Pick<Ball, "x" | "y">,
+  style: BallStyle,
+  roll: number,
+  t: Theme,
+) {
   if (ball.y - c.y < NEAR + BALL_R) return;
   const ground = project(c, ball.x, ball.y);
   const p = project(c, ball.x, ball.y, BALL_R);
   const r = BALL_R * p.k;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+  ctx.fillStyle = t.shadow;
   ctx.beginPath();
   ctx.ellipse(ground.x + r * 0.15, ground.y, r * 1.05, r * 0.32, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -294,11 +482,14 @@ function drawBall(ctx: CanvasRenderingContext2D, c: Cam, ball: Pick<Ball, "x" | 
   const g = ctx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.4, r * 0.1, p.x, p.y, r);
   g.addColorStop(0, style.light);
   g.addColorStop(1, style.dark);
-  ctx.save();
+  // 락에서는 공이 자기 색으로 빛난다
+  glow(ctx, t, style.light, 22);
   ctx.beginPath();
   ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
+  noGlow(ctx);
+  ctx.save();
   ctx.clip();
   // 소용돌이 무늬가 구르면서 위로 넘어간다
   ctx.strokeStyle = style.swirl;
@@ -379,6 +570,11 @@ function drawPinMap(ctx: CanvasRenderingContext2D, standing: Set<number>) {
   const rows = [[7, 8, 9, 10], [4, 5, 6], [2, 3], [1]];
   const r = 8.5;
   const gap = 20;
+  // 밝은 볼링장에서도 보이도록 어두운 바탕
+  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.beginPath();
+  ctx.roundRect(8, 8, gap * 3 + r * 2 + 12, gap * 0.85 * 3 + r * 2 + 12, 14);
+  ctx.fill();
   rows.forEach((row, ri) => {
     row.forEach((id, i) => {
       const x = 14 + r + ri * (gap / 2) + i * gap;
@@ -417,14 +613,16 @@ function describeThrow(aim: number, power: number) {
   return `세기 ${Math.round(power * 9) + 1} · 방향 ${dir === 0 ? "가운데" : `${dir < 0 ? "왼쪽" : "오른쪽"} ${Math.abs(dir)}`}`;
 }
 
-export function BowlingGame() {
+export function BowlingGame({ meName, myBest }: { meName: string | null; myBest: number | null }) {
+  const router = useRouter();
   const [rolls, setRolls] = useState<number[]>([]);
   const [phase, setPhase] = useState<Phase>("ready");
   const [message, setMessage] = useState<string>();
   const [lastThrow, setLastThrow] = useState<string>();
   const [weight, setWeight] = useState(12);
   const [ballIndex, setBallIndex] = useState(0);
-  const best = useSyncExternalStore(subscribeBest, readBest, () => null);
+  const themeKey = useSyncExternalStore(subscribeTheme, readTheme, () => "bright" as ThemeKey);
+  const [saved, setSaved] = useState<Saved | "saving">();
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -435,13 +633,15 @@ export function BowlingGame() {
   const startXRef = useRef(0);
   const ballStyleRef = useRef<BallStyle>(BALLS[0]);
   const weightRef = useRef(12);
+  const themeRef = useRef<Theme>(THEMES.bright);
   const fallenRef = useRef(new Map<number, { angle: number; spin: number }>());
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     ballStyleRef.current = BALLS[ballIndex];
     weightRef.current = weight;
-  }, [ballIndex, weight]);
+    themeRef.current = THEMES[themeKey];
+  }, [ballIndex, weight, themeKey]);
 
   function go(next: Phase) {
     phaseRef.current = next;
@@ -449,6 +649,22 @@ export function BowlingGame() {
   }
   const goRef = useRef(go);
   const setLastThrowRef = useRef(setLastThrow);
+
+  /** 끝난 게임을 랭킹에 남긴다 (서버가 투구 기록으로 점수를 다시 계산) */
+  function save(finished: number[]) {
+    setSaved("saving");
+    const before = myBest;
+    saveMinigameScore(finished)
+      .then((r) => {
+        setSaved({ ...r, before });
+        router.refresh();
+      })
+      .catch(() => setSaved({ error: "랭킹에 저장하지 못했어요. 잠시 후 다시 해 주세요." }));
+  }
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -548,7 +764,7 @@ export function BowlingGame() {
         setMessage(undefined);
         if (state.over) {
           pinsRef.current = w.pins;
-          saveBest(state.frames[9].total ?? 0);
+          saveRef.current(next);
           goRef.current("over");
           return;
         }
@@ -595,7 +811,8 @@ export function BowlingGame() {
       cam.y += (target - cam.y) * Math.min(1, dt * (w ? 6 : 3));
 
       const pins = w ? w.pins : pinsRef.current;
-      drawLane(ctx, cam);
+      const theme = themeRef.current;
+      drawLane(ctx, cam, theme, now);
 
       // 밀어 올리는 중이면 지금 방향을 바닥에 화살표로 보여준다
       const swipe = gesture?.swipe;
@@ -619,20 +836,20 @@ export function BowlingGame() {
           }
           f.angle += f.spin * dt * Math.min(1, Math.hypot(p.vx, p.vy));
           const angle = f.angle;
-          items.push({ y: p.y, draw: () => drawFallen(ctx, cam, p.x, p.y, angle) });
+          items.push({ y: p.y, draw: () => drawFallen(ctx, cam, p.x, p.y, angle, theme) });
         } else {
           items.push({
             y: p.y,
             draw: () => {
               const g = project(cam, p.x, p.y);
-              drawPin(ctx, g.x, g.y, g.k);
+              drawPin(ctx, g.x, g.y, g.k, theme);
             },
           });
         }
       }
       if (!(w && (w.ball.gone || w.ball.y > PIT_Y))) {
         const style = ballStyleRef.current;
-        items.push({ y: ball.y, draw: () => drawBall(ctx, cam, ball, style, roll) });
+        items.push({ y: ball.y, draw: () => drawBall(ctx, cam, ball, style, roll, theme) });
       }
       items.sort((a, b) => b.y - a.y).forEach((i) => i.draw());
 
@@ -687,6 +904,7 @@ export function BowlingGame() {
     setRolls([]);
     setMessage(undefined);
     setLastThrow(undefined);
+    setSaved(undefined);
     go("ready");
   }
 
@@ -697,6 +915,16 @@ export function BowlingGame() {
   return (
     <div className="flex flex-col gap-3 px-5 pt-4">
       <ScoreSheet frames={state.frames} current={state.over ? -1 : state.frameIndex} />
+
+      <Segmented
+        label="볼링장 분위기"
+        value={themeKey}
+        onSelect={(k) => saveTheme(k === "rock" ? "rock" : "bright")}
+        options={[
+          { key: "bright", label: "☀️ 밝은 볼링장" },
+          { key: "rock", label: "🪩 락 볼링장" },
+        ]}
+      />
 
       <div ref={wrapRef} className="relative overflow-hidden rounded-2xl bg-black">
         <canvas
@@ -711,13 +939,13 @@ export function BowlingGame() {
           </div>
         )}
         {lastThrow && (
-          <div className="pointer-events-none absolute bottom-2 left-3 text-xs font-semibold text-white/75">
+          <div className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-black/50 px-2 py-0.5 text-xs font-semibold text-white">
             {lastThrow}
           </div>
         )}
-        <div className="pointer-events-none absolute right-3 bottom-2 text-right text-xs font-semibold text-white/75">
+        <div className="pointer-events-none absolute right-2 bottom-2 rounded-full bg-black/50 px-2 py-0.5 text-xs font-semibold text-white">
           {state.over ? "게임 끝" : `${state.frameIndex + 1}프레임`}
-          {best !== null && <div>최고 {best}</div>}
+          {myBest !== null && ` · 내 최고 ${myBest}`}
         </div>
       </div>
 
@@ -727,6 +955,13 @@ export function BowlingGame() {
         {phase === "rolling" && "굴러가는 중…"}
         {phase === "over" && "수고했어요! 한 판 더 해볼까요?"}
       </p>
+      {!meName && (
+        <p className="-mt-2 text-center text-[13px]">
+          <Link href="/home" className="font-semibold text-link">
+            이름을 고르면 게임 랭킹에 올라가요 ›
+          </Link>
+        </p>
+      )}
 
       {/* 공 고르기 (던지기 전에만) */}
       <div className="grid grid-cols-2 gap-2.5">
@@ -762,7 +997,16 @@ export function BowlingGame() {
         <BottomBar>
           <div className="text-center text-[15px]">
             최종 <span className="text-xl font-bold">{total}</span>점
-            {best !== null && total >= best && total > 0 ? " · 이 기기 최고 기록!" : ""}
+            <div className="text-[13px] text-muted">
+              {saved === "saving" && "랭킹에 저장하는 중…"}
+              {saved && saved !== "saving" && saved.error}
+              {saved && saved !== "saving" && saved.rank !== undefined && (
+                <>
+                  게임 랭킹 <b className="text-accent">{saved.rank}위</b> · {meName} 최고 {saved.best}점
+                  {saved.score !== undefined && saved.score > (saved.before ?? -1) ? " · 최고 기록 갱신!" : ""}
+                </>
+              )}
+            </div>
           </div>
           <button type="button" onClick={restart} className={primaryButton}>
             새 게임

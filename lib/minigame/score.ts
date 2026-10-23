@@ -96,3 +96,21 @@ export function gameState(rolls: number[]): GameState {
 
   return { frames, frameIndex: 9, freshRack, over };
 }
+
+/**
+ * 끝까지 친 정상적인 한 게임이면 최종 점수, 아니면 null.
+ * (서버에서 랭킹에 올리기 전에 투구 기록으로 점수를 다시 계산한다)
+ */
+export function finalScore(rolls: number[]): number | null {
+  if (!rolls.every((n) => Number.isInteger(n) && n >= 0 && n <= 10)) return null;
+  // 한 프레임에 서 있던 핀보다 많이 쓰러뜨릴 수 없다
+  let standing = 10;
+  for (let i = 0; i < rolls.length; i++) {
+    if (rolls[i] > standing) return null;
+    const before = gameState(rolls.slice(0, i + 1));
+    standing = before.freshRack ? 10 : standing - rolls[i];
+    if (before.over && i < rolls.length - 1) return null;
+  }
+  const state = gameState(rolls);
+  return state.over ? (state.frames[9].total ?? null) : null;
+}

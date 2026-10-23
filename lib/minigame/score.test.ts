@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gameState } from "./score";
+import { finalScore, gameState } from "./score";
 
 const lastTotal = (rolls: number[]) => gameState(rolls).frames.at(-1)?.total;
 
@@ -56,5 +56,22 @@ describe("미니게임 점수", () => {
     const s = gameState([...Array(18).fill(0), 4, 5]);
     expect(s.over).toBe(true);
     expect(s.frames[9].total).toBe(9);
+  });
+});
+
+describe("랭킹에 올릴 점수 확인", () => {
+  it("끝까지 친 정상 게임은 점수를 돌려준다", () => {
+    expect(finalScore(Array(12).fill(10))).toBe(300);
+    expect(finalScore(Array(21).fill(5))).toBe(150);
+    expect(finalScore([...Array(18).fill(0), 10, 3, 7])).toBe(20);
+  });
+
+  it("덜 끝났거나, 더 쳤거나, 말이 안 되는 기록은 거절한다", () => {
+    expect(finalScore(Array(11).fill(10))).toBeNull();
+    expect(finalScore(Array(13).fill(10))).toBeNull();
+    expect(finalScore([7, 7, ...Array(18).fill(0)])).toBeNull();
+    expect(finalScore([...Array(18).fill(0), 10, 3, 8])).toBeNull();
+    expect(finalScore([11, ...Array(19).fill(0)])).toBeNull();
+    expect(finalScore([1.5, ...Array(19).fill(0)])).toBeNull();
   });
 });
