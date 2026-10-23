@@ -10,7 +10,6 @@ const ROW_GAP = PIN_SPACING * Math.cos(Math.PI / 6);
 export const BALL_R = 0.109;
 export const PIN_R = 0.06;
 const FALLEN_R = 0.07;
-const BALL_MASS = 7;
 const PIN_MASS = 1.5;
 /** 기름이 끝나 공이 휘기 시작하는 구간 */
 const HOOK_START = 9;
@@ -21,6 +20,11 @@ const TOPPLE_SPEED = 0.25;
 /** 핀 데크 끝 (넘어가면 핀이 피트로 떨어진다) */
 export const PIT_Y = LANE_LENGTH + 3 * ROW_GAP + 0.35;
 export const BALL_START_Y = 0.3;
+/** 출발 위치 좌우 한계 (공이 레인 안에 있도록) */
+export const MAX_START = LANE_WIDTH / 2 - BALL_R - 0.04;
+/** 고를 수 있는 공 무게 (파운드) */
+export const MIN_WEIGHT = 8;
+export const MAX_WEIGHT = 16;
 
 export type Pin = {
   id: number;
@@ -38,8 +42,14 @@ export type Ball = {
   vy: number;
   gutter: boolean;
   gone: boolean;
+  /** kg */
+  mass: number;
 };
 export type Throw = {
+  /** 출발 위치 (m, 레인 가운데 0). 없으면 가운데 */
+  startX?: number;
+  /** 공 무게 (파운드). 없으면 12 */
+  weight?: number;
   /** 방향 -1 ~ 1 (왼쪽 ~ 오른쪽) */
   aim: number;
   /** 휘는 정도 -1 ~ 1 (왼쪽으로 ~ 오른쪽으로) */
@@ -72,16 +82,19 @@ export function rack(): Pin[] {
   return pins;
 }
 
-export function ballSpeed(power: number) {
-  return 5.5 + power * 4.5;
+/** 무거운 공은 조금 느리게 나간다 */
+export function ballSpeed(power: number, weight = 12) {
+  return (5.5 + power * 4.5) * (1 - (weight - 12) * 0.02);
 }
 
 export function launch(t: Throw, pins: Pin[]): World {
-  const speed = ballSpeed(t.power);
+  const weight = t.weight ?? 12;
+  const speed = ballSpeed(t.power, weight);
   const angle = t.aim * MAX_AIM;
   return {
     ball: {
-      x: 0,
+      x: Math.max(-MAX_START, Math.min(MAX_START, t.startX ?? 0)),
+      mass: weight * 0.4536,
       y: BALL_START_Y,
       vx: speed * Math.sin(angle),
       vy: speed * Math.cos(angle),
@@ -95,11 +108,11 @@ export function launch(t: Throw, pins: Pin[]): World {
   };
 }
 
-/** 겨냥선 끝점 (휘기 전 직선 방향) */
-export function aimPoint(aim: number, distance: number) {
+/** 겨냥 화살표 끝점 (휘기 전 직선 방향) */
+export function aimPoint(aim: number, distance: number, startX = 0) {
   const angle = aim * MAX_AIM;
   return {
-    x: distance * Math.sin(angle),
+    x: startX + distance * Math.sin(angle),
     y: BALL_START_Y + distance * Math.cos(angle),
   };
 }
@@ -169,7 +182,7 @@ export function step(w: World, dt: number) {
   for (const p of pins) {
     if (p.gone) continue;
     if (!ball.gone && !ball.gutter) {
-      const hit = collide(ball, BALL_R, BALL_MASS, p, PIN_R, PIN_MASS, 0.75);
+      const hit = collide(ball, BALL_R, ball.mass, p, PIN_R, PIN_MASS, 0.75);
       if (hit > 0) p.down = true;
     }
   }

@@ -50,3 +50,17 @@ describe("미니게임 물리", () => {
     });
   });
 });
+
+describe("출발 위치와 공 무게", () => {
+  it("출발 위치에서 공이 나가고, 레인 밖으로는 못 나간다", () => {
+    expect(launch({ aim: 0, hook: 0, power: 0.5, startX: 0.2 }, rack()).ball.x).toBe(0.2);
+    expect(Math.abs(launch({ aim: 0, hook: 0, power: 0.5, startX: 5 }, rack()).ball.x)).toBeLessThan(0.53);
+  });
+
+  it("무거운 공은 느리지만 핀을 더 세게 민다", () => {
+    const light = launch({ aim: 0, hook: 0, power: 0.5, weight: 8 }, rack()).ball;
+    const heavy = launch({ aim: 0, hook: 0, power: 0.5, weight: 16 }, rack()).ball;
+    expect(heavy.vy).toBeLessThan(light.vy);
+    expect(heavy.mass).toBeGreaterThan(light.mass);
+  });
+});
