@@ -8,6 +8,12 @@ const PATHS = {
     </>
   ),
   chart: <path d="M5 20v-8M12 20V5M19 20v-5" />,
+  ball: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M10 8.2h.01M13.6 7.6h.01M12.6 11.2h.01" strokeWidth="2.6" />
+    </>
+  ),
   trophy: (
     <path
       d="M8 21h8M12 16v5M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"

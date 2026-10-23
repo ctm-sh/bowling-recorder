@@ -161,6 +161,14 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
             />
           </div>
         </Card>
+        <Link href="/game" className="flex min-h-16 items-center gap-3 rounded-2xl bg-surface px-5 py-3.5">
+          <Icon name="ball" size={28} className="text-accent" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[17px] font-semibold">볼링 미니게임</span>
+            <span className="text-[13px] text-muted">방향·휘는 정도·세기를 맞춰 스트라이크!</span>
+          </span>
+          <Icon name="chevronRight" size={16} strokeWidth={2} className="text-muted" />
+        </Link>
         {/* TODO(디자인): 시안의 "다음 정모" 카드는 아직 없는 기능이라 넣지 않았다 */}
       </div>
     </div>
