@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BottomBar } from "@/components/Flow";
 import { Icon } from "@/components/Icon";
-import { Segmented, primaryButton } from "@/components/ui";
+import { MinigameRanking } from "@/components/MinigameRanking";
+import { Segmented, primaryButton, secondaryButton } from "@/components/ui";
 import {
   BALL_R,
   BALL_START_Y,
@@ -28,7 +29,7 @@ import {
 } from "@/lib/minigame/physics";
 import { gameState } from "@/lib/minigame/score";
 import { readSwipe, swipeAim, type SwipePoint } from "@/lib/minigame/swipe";
-import { saveMinigameScore } from "./actions";
+import { saveMinigameScore, type SaveResult } from "./actions";
 
 const STEP = 1 / 240;
 const THEME_KEY = "ttegul-minigame-theme";
@@ -55,8 +56,8 @@ function subscribeTheme(l: () => void) {
   return () => themeListeners.delete(l);
 }
 
-/** before: 이번 게임 전 내 최고 점수 (기록 갱신 표시용) */
-type Saved = { error?: string; score?: number; best?: number; rank?: number; before?: number | null };
+/** before: 이번 게임 전 내 최고 점수 (기록 갱신 표시용). 서버에 못 닿으면 error만 있다. */
+type Saved = Partial<SaveResult> & { before?: number | null };
 
 /** 던지기 전 → 굴러가는 중 → (10프레임 끝) */
 type Phase = "ready" | "rolling" | "over";
@@ -623,6 +624,8 @@ export function BowlingGame({ meName, myBest }: { meName: string | null; myBest:
   const [ballIndex, setBallIndex] = useState(0);
   const themeKey = useSyncExternalStore(subscribeTheme, readTheme, () => "bright" as ThemeKey);
   const [saved, setSaved] = useState<Saved | "saving">();
+  /** 게임이 끝나면 결과·랭킹 창을 바로 띄운다 (닫으면 점수판을 볼 수 있다) */
+  const [showResult, setShowResult] = useState(false);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -653,6 +656,7 @@ export function BowlingGame({ meName, myBest }: { meName: string | null; myBest:
   /** 끝난 게임을 랭킹에 남긴다 (서버가 투구 기록으로 점수를 다시 계산) */
   function save(finished: number[]) {
     setSaved("saving");
+    setShowResult(true);
     const before = myBest;
     saveMinigameScore(finished)
       .then((r) => {
@@ -905,6 +909,7 @@ export function BowlingGame({ meName, myBest }: { meName: string | null; myBest:
     setMessage(undefined);
     setLastThrow(undefined);
     setSaved(undefined);
+    setShowResult(false);
     go("ready");
   }
 
@@ -993,26 +998,115 @@ export function BowlingGame({ meName, myBest }: { meName: string | null; myBest:
         />
       </div>
 
-      {phase === "over" && (
-        <BottomBar>
-          <div className="text-center text-[15px]">
-            최종 <span className="text-xl font-bold">{total}</span>점
-            <div className="text-[13px] text-muted">
-              {saved === "saving" && "랭킹에 저장하는 중…"}
-              {saved && saved !== "saving" && saved.error}
-              {saved && saved !== "saving" && saved.rank !== undefined && (
-                <>
-                  게임 랭킹 <b className="text-accent">{saved.rank}위</b> · {meName} 최고 {saved.best}점
-                  {saved.score !== undefined && saved.score > (saved.before ?? -1) ? " · 최고 기록 갱신!" : ""}
-                </>
-              )}
-            </div>
+      {phase === "over" &&
+        (showResult ? (
+          <ResultSheet
+            total={total}
+            saved={saved}
+            meName={meName}
+            onRestart={restart}
+            onClose={() => setShowResult(false)}
+          />
+        ) : (
+          <BottomBar>
+            <button type="button" onClick={restart} className={primaryButton}>
+              새 게임
+            </button>
+            <button type="button" onClick={() => setShowResult(true)} className={secondaryButton}>
+              결과·랭킹 보기
+            </button>
+          </BottomBar>
+        ))}
+    </div>
+  );
+}
+
+/** 게임이 끝나면 아래에서 올라오는 결과 창: 최종 점수, 내 순위, 랭킹 상위 5명 */
+function ResultSheet({
+  total,
+  saved,
+  meName,
+  onRestart,
+  onClose,
+}: {
+  total: number;
+  saved: Saved | "saving" | undefined;
+  meName: string | null;
+  onRestart: () => void;
+  onClose: () => void;
+}) {
+  // Esc로 닫기
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const done = saved && saved !== "saving" ? saved : null;
+  const newBest = done?.score !== undefined && done.score > (done.before ?? -1);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="game-result-title"
+        className="flex max-h-[88dvh] w-full max-w-[480px] flex-col gap-4 overflow-y-auto rounded-t-[22px] bg-background px-5 pt-5 pb-[max(env(safe-area-inset-bottom),20px)]"
+      >
+        <div className="flex flex-col items-center gap-1 text-center">
+          <div className="text-[13px] font-semibold text-muted">게임 끝</div>
+          <h2 id="game-result-title" className="text-5xl leading-[1.07] font-bold tracking-[-1px]">
+            {total}
+            <span className="text-[22px] font-semibold">점</span>
+          </h2>
+          <div className="min-h-6 text-[15px]">
+            {saved === "saving" && <span className="text-muted">랭킹에 올리는 중…</span>}
+            {done?.rank !== undefined && (
+              <span>
+                🏆 게임 랭킹 <b className="text-accent">{done.rank}위</b>
+                <span className="text-muted"> · {done.ranking?.length}명 중</span>
+              </span>
+            )}
+            {done?.error && <span className="text-muted">{done.error}</span>}
           </div>
-          <button type="button" onClick={restart} className={primaryButton}>
+          {done?.rank !== undefined &&
+            (newBest ? (
+              <span className="rounded-full bg-accent px-3 py-1 text-[13px] font-semibold text-white">
+                {meName} 최고 기록 갱신!
+              </span>
+            ) : (
+              <span className="text-[13px] text-muted">
+                {meName} 최고 {done.best}점
+              </span>
+            ))}
+          {done?.error && !meName && (
+            <Link href="/home" className="text-[15px] font-semibold text-link">
+              이름 고르러 가기 ›
+            </Link>
+          )}
+        </div>
+
+        {done?.ranking ? (
+          <MinigameRanking ranking={done.ranking} meId={done.meId ?? null} limit={5} playLink={false} />
+        ) : (
+          saved === "saving" && <div className="h-40 animate-pulse rounded-2xl bg-surface" aria-hidden />
+        )}
+
+        <div className="flex flex-col gap-2">
+          <button type="button" onClick={onRestart} className={primaryButton} autoFocus>
             새 게임
           </button>
-        </BottomBar>
-      )}
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={onClose} className={secondaryButton}>
+              점수판 보기
+            </button>
+            <Link href="/ranking?sort=game" className={secondaryButton}>
+              전체 랭킹
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
