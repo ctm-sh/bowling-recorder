@@ -20,15 +20,17 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const { pick } = await searchParams;
   const [meId, members, sessions] = await Promise.all([getMeId(), listMembers(), listSessions()]);
-  const me = pick ? undefined : members.find((m) => m.id === meId);
+  const remembered = members.find((m) => m.id === meId);
+  const me = pick ? undefined : remembered;
 
   if (!me) {
+    // "다른 떼굴러로 보기"로 왔으면 원래 보던 홈으로, 처음 고르는 중이면 처음 화면으로 돌아간다
     return (
       <WhoAmI
         members={members.filter((m) => m.active)}
         currentId={meId ?? undefined}
-        back={START_HREF}
-        backLabel={START_LABEL}
+        back={remembered ? "/home" : START_HREF}
+        backLabel={remembered ? "홈" : START_LABEL}
       />
     );
   }
@@ -60,6 +62,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   return (
     <div className="pb-6">
       <PageHeader
+        back={START_HREF}
+        backLabel={START_LABEL}
         eyebrow={`${tierLabel(me.tier)} · ${me.name}`}
         title="홈"
         action={
