@@ -12,7 +12,7 @@ export type Session = {
 
 export type SessionSummary = Session & { attendeeCount: number; gameCount: number };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** 한국 시간 기준 오늘 (YYYY-MM-DD) */
 export function todayKST() {

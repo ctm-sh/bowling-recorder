@@ -20,6 +20,12 @@ const PATHS = {
       strokeLinejoin="round"
     />
   ),
+  medal: (
+    <>
+      <circle cx="12" cy="15" r="6" />
+      <path d="M8.5 10.2 6 3h4l2 5 2-5h4l-2.5 7.2" strokeLinejoin="round" />
+    </>
+  ),
   calendar: (
     <>
       <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -61,6 +67,7 @@ const PATHS = {
   chevronRight: <path d="m9 6 6 6-6 6" strokeLinejoin="round" />,
   chevronLeft: <path d="m15 6-6 6 6 6" strokeLinejoin="round" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" strokeLinejoin="round" />,
+  close: <path d="M6 6l12 12M18 6 6 18" />,
   swap: <path d="M4 8h13l-3-3M20 16H7l3 3" strokeLinejoin="round" />,
   plus: <path d="M12 5v14M5 12h14" />,
   pencil: <path d="M4 20h4L19 9l-4-4L4 16z" strokeLinejoin="round" />,

@@ -5,10 +5,18 @@ export type Step = (typeof STEPS)[number];
 
 /** 정모 진행 단계 표시: 참석 → 팀 구성 → 점수 → 결과. 지나온·현재 단계는 파랑. */
 export function StepBar({ current, dark }: { current: Step; dark?: boolean }) {
-  const at = STEPS.indexOf(current);
+  return <Steps steps={STEPS} at={STEPS.indexOf(current)} dark={dark} />;
+}
+
+/** 단계 표시 공통 모양 */
+export function Steps({ steps, at, dark }: { steps: readonly string[]; at: number; dark?: boolean }) {
   return (
-    <ol aria-label="진행 단계" className="mx-5 mt-2 grid grid-cols-4 gap-1.5">
-      {STEPS.map((label, i) => (
+    <ol
+      aria-label="진행 단계"
+      className="mx-5 mt-2 grid gap-1.5"
+      style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+    >
+      {steps.map((label, i) => (
         <li key={label} aria-current={i === at ? "step" : undefined} className="flex flex-col gap-1.5">
           <span
             className={`h-1 rounded-sm ${i <= at ? (dark ? "bg-dark-link" : "bg-accent") : dark ? "bg-dark-separator" : "bg-edge"}`}
