@@ -34,6 +34,7 @@ import {
   teamHandicaps,
 } from "@/lib/domain/teams";
 import type { HandicapTable, Player, Slot } from "@/lib/domain/types";
+import { matchesName } from "@/lib/name-search";
 import { createGame, type GamePayload } from "../actions";
 
 export type BuilderPerson = { id: string; name: string; tier: number | null; avg: number | null };
@@ -77,18 +78,25 @@ function orderFrom(slots: Slot[], everyone: Player[]) {
 
 export function TeamBuilder({
   sessionId,
-  people,
   handicapTable,
   initial,
   previousGameId,
+  people: attendees,
+  addable,
 }: {
   sessionId: string;
   /** "이전 팀 그대로"로 불러올 직전 게임 */
   previousGameId?: string;
   people: BuilderPerson[];
+  /** 아직 참석자가 아니어서 이 화면에서 추가할 수 있는 회원 */
+  addable: BuilderPerson[];
   handicapTable: HandicapTable;
   initial: BuilderInitial;
 }) {
+  // 이 화면에서 추가한 사람은 게임을 확정할 때 참석자로 저장된다
+  const [added, setAdded] = useState<BuilderPerson[]>([]);
+  const [addQuery, setAddQuery] = useState("");
+  const people = useMemo(() => [...attendees, ...added], [attendees, added]);
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const allPlayers: Player[] = useMemo(
     () => people.map((p) => ({ id: p.id, tier: effectiveTier(p.tier), avg: p.avg })),
@@ -150,6 +158,15 @@ export function TeamBuilder({
       setManual((prev) => Object.fromEntries(Object.entries(prev).filter(([m]) => !next.has(m))));
       lineupChanged();
     }
+  }
+
+  function addParticipant(person: BuilderPerson) {
+    setAdded((prev) => [...prev, person]);
+    setAddQuery("");
+    setOrder((prev) => [...prev, person.id]);
+    if (mode === "random") {
+      reshuffle([...participants, { id: person.id, tier: effectiveTier(person.tier), avg: person.avg }], teamCount);
+    } else lineupChanged();
   }
 
   function changeTeamCount(count: number) {
@@ -316,8 +333,16 @@ export function TeamBuilder({
     );
     if (bad) return setError(`${byId.get(bad.memberId)!.name} 핸디는 0~300 사이 숫자로 입력해주세요.`);
     const members = finalSlots.map((s) => ({ memberId: s.memberId, handicap: personal.get(s.memberId)! }));
+    // 추가했다가 다시 뺀 사람은 참석자로 저장하지 않는다
+    const newAttendeeIds = added.map((p) => p.id).filter((id) => !excluded.has(id));
     startTransition(async () => {
-      const result = await createGame(sessionId, { mode, slots: finalSlots, teams: payloadTeams, members });
+      const result = await createGame(sessionId, {
+        mode,
+        slots: finalSlots,
+        teams: payloadTeams,
+        members,
+        newAttendeeIds,
+      });
       if (result?.error) setError(result.error);
     });
   }
@@ -331,6 +356,9 @@ export function TeamBuilder({
   const receiving = teams.filter((t) => t.netDefault > 0 || t.override !== undefined);
   const adjustedTeams = teams.filter((t) => t.override !== undefined && Number(t.override) !== t.netDefault);
   const grid = { gridTemplateColumns: `28px repeat(${teamCount}, minmax(72px, 1fr))` };
+  const notAdded = addable.filter((p) => !byId.has(p.id));
+  const searchTerm = addQuery.trim();
+  const addMatches = searchTerm ? notAdded.filter((p) => matchesName(p.name, searchTerm)) : [];
 
   return (
     <div>
@@ -367,6 +395,40 @@ export function TeamBuilder({
               );
             })}
           </ul>
+        )}
+        {editPeople && notAdded.length > 0 && (
+          <>
+            <label htmlFor="add-member-search" className="sr-only">
+              추가할 회원 검색
+            </label>
+            <div className="mt-2 flex h-11 items-center gap-2 rounded-[11px] bg-fill px-3.5 focus-within:ring-2 focus-within:ring-accent">
+              <Icon name="search" size={16} strokeWidth={2} className="text-muted" />
+              <input
+                id="add-member-search"
+                type="search"
+                value={addQuery}
+                onChange={(e) => setAddQuery(e.target.value)}
+                placeholder="이름으로 회원 추가 (초성도 돼요)"
+                className="min-w-0 flex-1 bg-transparent text-[17px] text-foreground outline-none placeholder:text-muted"
+              />
+            </div>
+            {searchTerm &&
+              (addMatches.length > 0 ? (
+                // 이름을 눌러도 검색창 포커스가 유지되어 키보드가 내려가지 않게 한다
+                <ul onPointerDown={(e) => e.preventDefault()} className="flex flex-wrap gap-2">
+                  {addMatches.map((p) => (
+                    <li key={p.id}>
+                      <button onClick={() => addParticipant(p)} aria-label={`${p.name} 추가`} className={chip(false)}>
+                        <Icon name="plus" size={14} strokeWidth={2} />
+                        {p.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-1 text-sm text-muted">추가할 수 있는 회원 중 “{searchTerm}” 이름이 없어요.</p>
+              ))}
+          </>
         )}
       </section>
 

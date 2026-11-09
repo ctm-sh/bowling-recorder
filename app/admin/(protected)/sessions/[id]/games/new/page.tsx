@@ -4,7 +4,7 @@ import { StepBar } from "@/components/Flow";
 import { NavBar } from "@/components/PageHeader";
 import { getHandicapTable, listGames } from "@/lib/db/games";
 import { listMembers } from "@/lib/db/members";
-import { getSession } from "@/lib/db/sessions";
+import { attendanceCandidates, getSession } from "@/lib/db/sessions";
 import { assignRandom, defaultTeamCount, effectiveTier } from "@/lib/domain/teams";
 import { TeamBuilder, type BuilderPerson, type BuilderInitial } from "./TeamBuilder";
 
@@ -14,11 +14,22 @@ export default async function NewGamePage({ params, searchParams }: PageProps<"/
   const data = await getSession(id);
   if (!data) notFound();
 
-  const [members, games, table] = await Promise.all([listMembers(), listGames(id), getHandicapTable()]);
+  const [members, candidates, games, table] = await Promise.all([
+    listMembers(),
+    attendanceCandidates(id, data.attendeeIds),
+    listGames(id),
+    getHandicapTable(),
+  ]);
   const attending = new Set(data.attendeeIds);
-  const people: BuilderPerson[] = members
-    .filter((m) => attending.has(m.id))
-    .map((m) => ({ id: m.id, name: m.name, tier: m.tier, avg: m.avg }));
+  const toPerson = (m: (typeof members)[number]): BuilderPerson => ({
+    id: m.id,
+    name: m.name,
+    tier: m.tier,
+    avg: m.avg,
+  });
+  const people = members.filter((m) => attending.has(m.id)).map(toPerson);
+  // 팀 구성 중에 추가할 수 있는 회원 (최근 참석한 사람이 앞)
+  const addable = candidates.filter((m) => !attending.has(m.id)).map(toPerson);
 
   // "팀 그대로": 이전 게임의 팀·묶음·합의값을 미리 채운다. 아니면 서버에서 첫 랜덤 배정.
   const source = typeof from === "string" ? games.find((g) => g.id === from) : undefined;
@@ -75,6 +86,7 @@ export default async function NewGamePage({ params, searchParams }: PageProps<"/
         <TeamBuilder
           sessionId={id}
           people={people}
+          addable={addable}
           handicapTable={table}
           initial={initial}
           previousGameId={games.at(-1)?.id}
