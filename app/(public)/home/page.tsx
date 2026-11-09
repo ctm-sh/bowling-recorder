@@ -6,11 +6,12 @@ import { tierLabel } from "@/components/TierBadge";
 import { Card, Pill } from "@/components/ui";
 import { completeGames } from "@/lib/db/allGames";
 import { listMembers } from "@/lib/db/members";
+import { listRankingMatches } from "@/lib/db/rankingMatches";
 import { getSessionResults } from "@/lib/db/results";
 import { listSessions } from "@/lib/db/sessions";
 import { getSettings } from "@/lib/db/settings";
 import { winRecord } from "@/lib/domain/stats";
-import { formatAmount, formatDateLong } from "@/lib/format";
+import { formatAmount, formatDateLong, rankingMatchTitle } from "@/lib/format";
 import { START_HREF, START_LABEL } from "@/lib/brand";
 import { getMeId } from "@/lib/me";
 import { WhoAmI } from "../WhoAmI";
@@ -37,11 +38,16 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
 
   // 게임이 있는 가장 최근 정모에서 내 게임
   const latest = sessions.find((s) => s.gameCount > 0);
-  const [results, games, settings] = await Promise.all([
+  const [results, games, settings, matches] = await Promise.all([
     latest ? getSessionResults(latest.id, latest.fee_per_game) : Promise.resolve([]),
     completeGames(),
     getSettings(),
+    listRankingMatches(),
   ]);
+  // 진행 중인 랭킹전이 없으면 가장 최근 회차로 연결한다
+  const played = matches.filter((m) => m.entryCount > 0);
+  const live = played.filter((m) => !m.closed_at);
+  const matchLinks = live.length > 0 ? live : played.slice(0, 1);
   const mine = results
     .map((r) => {
       const team = r.ranked.find((t) => t.members.some((m) => m.memberId === me.id));
@@ -79,6 +85,25 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
       />
 
       <div className="flex flex-col gap-3 px-5 pt-4">
+        {matchLinks.map((m) => (
+          <Link
+            key={m.id}
+            href={`/ranking-matches/${m.id}`}
+            className="flex min-h-16 items-center gap-3 rounded-2xl bg-surface px-5 py-3.5"
+          >
+            <Icon name="medal" size={28} className="text-accent" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex items-center gap-2 text-[17px] font-semibold">
+                {rankingMatchTitle(m.date)}
+                {!m.closed_at && <Pill tone="accent">실시간</Pill>}
+              </span>
+              <span className="text-[13px] text-muted">
+                {formatDateLong(m.date)} · {m.entryCount}명 · {m.closed_at ? "결과 보기" : "현황 보기"}
+              </span>
+            </span>
+            <Icon name="chevronRight" size={16} strokeWidth={2} className="text-muted" />
+          </Link>
+        ))}
         <section className="flex flex-col gap-4 rounded-[18px] bg-black p-5 text-white">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[13px] font-semibold text-dark-muted">

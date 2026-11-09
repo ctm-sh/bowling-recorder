@@ -21,6 +21,8 @@ export type GamePayload = {
   teams: { teamNo: number; handicap: number; fill: number | null }[];
   /** 사람별 개인 핸디 (합의 조정 반영) */
   members: { memberId: string; handicap: number }[];
+  /** 팀 구성 중에 추가한 사람. 게임을 확정할 때 참석자로 함께 저장한다. */
+  newAttendeeIds: string[];
 };
 
 function isInt(n: unknown, min: number, max: number): n is number {
@@ -42,10 +44,10 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
 
   const attendees = await db().from("attendees").select("member_id").eq("session_id", sessionId);
   if (attendees.error) throw attendees.error;
-  const problem = lineupError(
-    slots,
-    attendees.data.map((a) => a.member_id as string),
-  );
+  const attending = new Set(attendees.data.map((a) => a.member_id as string));
+  const inLineup = new Set(slots.map((s) => s.memberId));
+  const newAttendeeIds = [...new Set(payload.newAttendeeIds)].filter((id) => !attending.has(id) && inLineup.has(id));
+  const problem = lineupError(slots, [...attending, ...newAttendeeIds]);
   if (problem) return { error: problem };
 
   const teamCount = Math.max(...slots.map((s) => s.teamNo));
@@ -63,7 +65,7 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
   const [members, stats, table, last] = await Promise.all([
     db()
       .from("members")
-      .select("id, tier")
+      .select("id, tier, active")
       .in(
         "id",
         slots.map((s) => s.memberId),
@@ -81,6 +83,9 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
   if (members.error) throw members.error;
   if (stats.error) throw stats.error;
   if (last.error) throw last.error;
+
+  const activeIds = new Set(members.data.filter((m) => m.active).map((m) => m.id as string));
+  if (newAttendeeIds.some((id) => !activeIds.has(id))) return { error: "추가할 수 없는 회원이 들어 있어요." };
 
   const avgById = new Map(stats.data.map((s) => [s.member_id as string, s.avg as number | null]));
   const players: Player[] = members.data.map((m) => ({
@@ -149,6 +154,17 @@ export async function createGame(sessionId: string, payload: GamePayload): Promi
     }));
     const inserted = await db().from("team_members").insert(memberRows);
     if (inserted.error) throw inserted.error;
+
+    // 마지막에 저장해야 앞 단계가 실패했을 때 참석자만 남지 않는다
+    if (newAttendeeIds.length) {
+      const added = await db()
+        .from("attendees")
+        .upsert(
+          newAttendeeIds.map((member_id) => ({ session_id: sessionId, member_id })),
+          { onConflict: "session_id,member_id", ignoreDuplicates: true },
+        );
+      if (added.error) throw added.error;
+    }
   } catch (e) {
     await db().from("games").delete().eq("id", game.data.id);
     throw e;

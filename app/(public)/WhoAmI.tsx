@@ -9,21 +9,10 @@ import { BackLink } from "@/components/PageHeader";
 import { tierLabel } from "@/components/TierBadge";
 import { primaryButton } from "@/components/ui";
 import { TEAM_NAME } from "@/lib/brand";
+import { matchesName } from "@/lib/name-search";
 import { setMe } from "./me-actions";
 
 export type Pickable = { id: string; name: string; tier: number | null };
-
-const INITIALS = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
-
-/** "김민우" → "ㄱㅁㅇ" (초성 검색용) */
-function initials(name: string) {
-  return [...name]
-    .map((ch) => {
-      const code = ch.charCodeAt(0) - 0xac00;
-      return code >= 0 && code < 11172 ? INITIALS[Math.floor(code / 588)] : ch;
-    })
-    .join("");
-}
 
 /** 받침이 있으면 "으로", 없거나 ㄹ받침이면 "로" */
 function withRo(name: string) {
@@ -68,7 +57,7 @@ export function WhoAmI({
   }
 
   const q = query.trim();
-  const visible = members.filter((m) => !q || m.name.includes(q) || initials(m.name).includes(q));
+  const visible = members.filter((m) => !q || matchesName(m.name, q));
   const chosen = members.find((m) => m.id === selected);
 
   return (

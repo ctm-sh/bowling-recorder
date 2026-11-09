@@ -1,17 +1,19 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Icon } from "@/components/Icon";
+import { Icon, type IconName } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { GroupLabel, ListCard, Pill, primaryButton } from "@/components/ui";
 import { listMembers } from "@/lib/db/members";
+import { listRankingMatches } from "@/lib/db/rankingMatches";
 import { getSessionResults } from "@/lib/db/results";
 import { listSessions } from "@/lib/db/sessions";
 import { tierCandidates } from "@/lib/domain/tiers";
-import { formatDateLong } from "@/lib/format";
+import { formatDateLong, rankingMatchTitle } from "@/lib/format";
 
 export default async function AdminHomePage() {
-  const [members, sessions] = await Promise.all([listMembers(), listSessions()]);
+  const [members, sessions, matches] = await Promise.all([listMembers(), listSessions(), listRankingMatches()]);
   const open = sessions.filter((s) => !s.closed_at);
+  const openMatches = matches.filter((m) => !m.closed_at);
   const recentClosed = sessions.filter((s) => s.closed_at).slice(0, 3);
   const candidates = Object.values(tierCandidates(members));
   const ups = candidates.filter((k) => k === "up").length;
@@ -33,6 +35,20 @@ export default async function AdminHomePage() {
       />
 
       <div className="flex flex-col gap-3 px-5 pt-4">
+        {openMatches.map((m) => (
+          <section key={m.id} className="flex flex-col gap-4 rounded-[18px] bg-surface p-5">
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] font-semibold text-accent">진행 중</span>
+              <span className="text-[22px] font-bold tracking-[-0.4px]">{rankingMatchTitle(m.date)}</span>
+              <span className="text-sm text-muted">
+                {formatDateLong(m.date)} · {m.entryCount}명
+              </span>
+            </div>
+            <Link href={`/admin/ranking-matches/${m.id}`} className={primaryButton}>
+              랭킹전 이어하기
+            </Link>
+          </section>
+        ))}
         {open.map((s, i) => {
           const games = progress[i];
           const pending = games.find((g) => !g.complete);
@@ -69,16 +85,10 @@ export default async function AdminHomePage() {
           );
         })}
 
-        <MenuCard
-          href="/admin/sessions/new"
-          icon={
-            <span className="flex size-10 items-center justify-center rounded-full bg-accent-soft text-accent">
-              <Icon name="plus" size={20} strokeWidth={2} />
-            </span>
-          }
-          title="새 정모 시작"
-          sub="날짜, 참석자, 게임비 설정"
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <StartCard href="/admin/sessions/new" icon="plus" title="새 정모 시작" />
+          <StartCard href="/admin/ranking-matches/new" icon="medal" title="새 랭킹전 시작" />
+        </div>
 
         {candidates.length > 0 && (
           <MenuCard
@@ -116,6 +126,17 @@ export default async function AdminHomePage() {
         )}
       </div>
     </div>
+  );
+}
+
+function StartCard({ href, icon, title }: { href: string; icon: IconName; title: string }) {
+  return (
+    <Link href={href} className="flex min-h-11 items-center gap-2 rounded-[18px] bg-surface p-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+        <Icon name={icon} size={16} strokeWidth={2} />
+      </span>
+      <span className="text-sm font-semibold whitespace-nowrap">{title}</span>
+    </Link>
   );
 }
 
