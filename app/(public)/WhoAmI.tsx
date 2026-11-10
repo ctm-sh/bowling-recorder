@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { BottomBar } from "@/components/Flow";
 import { Icon } from "@/components/Icon";
 import { BackLink } from "@/components/PageHeader";
@@ -43,8 +43,27 @@ export function WhoAmI({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(currentId);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+
+  // 명단은 검색창 포커스(blur)에 묶지 않는다. iOS 등 일부 기기는 이름을 누르는 순간
+  // 포커스를 먼저 빼서, blur로 닫으면 탭이 닿기 전에 명단이 사라진다.
+  // 대신 검색창·명단 바깥을 눌렀을 때만 닫는다.
+  useEffect(() => {
+    if (!open) return;
+    function onOutside(e: PointerEvent) {
+      if (!pickerRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", onOutside);
+    return () => document.removeEventListener("pointerdown", onOutside);
+  }, [open]);
+
+  function pick(id: string) {
+    setSelected(id);
+    setOpen(false);
+    inputRef.current?.blur();
+  }
 
   function start() {
     if (!selected) return;
@@ -75,83 +94,83 @@ export function WhoAmI({
         </p>
       </div>
 
-      <div className="px-5 pt-6">
-        <label htmlFor="who-search" className="sr-only">
-          이름 검색
-        </label>
-        <div
-          className={`flex h-11 items-center gap-2 rounded-[11px] bg-fill px-3.5 ${open ? "ring-2 ring-accent" : ""}`}
-        >
-          <Icon name="search" size={16} strokeWidth={2} className="text-muted" />
-          <input
-            id="who-search"
-            ref={inputRef}
-            type="search"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => {
-              setOpen(true);
-              // 키보드가 올라와도 목록이 보이도록 검색창을 위로 올린다
-              setTimeout(() => inputRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
-            }}
-            onBlur={() => setOpen(false)}
-            placeholder="이름 검색 (초성도 돼요)"
-            role="combobox"
-            aria-expanded={open}
-            aria-controls="who-am-i-list"
-            className="min-w-0 flex-1 bg-transparent text-[17px] text-foreground outline-none placeholder:text-muted"
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 px-5 pt-6">
-        {open ? (
-          // 목록을 누르는 동안 검색창 포커스가 빠져 목록이 닫히지 않게 한다
-          <ul
-            id="who-am-i-list"
-            role="listbox"
-            aria-label="회원 명단"
-            onPointerDown={(e) => e.preventDefault()}
-            className="max-h-[50dvh] overflow-y-auto overscroll-contain rounded-xl bg-surface"
+      <div ref={pickerRef}>
+        <div className="px-5 pt-6">
+          <label htmlFor="who-search" className="sr-only">
+            이름 검색
+          </label>
+          <div
+            className={`flex h-11 items-center gap-2 rounded-[11px] bg-fill px-3.5 ${open ? "ring-2 ring-accent" : ""}`}
           >
-            {visible.map((m) => {
-              const on = m.id === selected;
-              return (
-                <li key={m.id} role="option" aria-selected={on} className="border-b border-separator last:border-b-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelected(m.id)}
-                    className="flex min-h-14 w-full items-center gap-3 px-4 text-left"
-                  >
-                    <span className={`flex-1 text-[17px] ${on ? "font-semibold text-accent" : "text-foreground"}`}>
-                      {m.name}
-                    </span>
-                    <span className="text-[13px] text-muted">{tierLabel(m.tier)}</span>
-                    {on && <Icon name="check" size={20} strokeWidth={2.4} className="text-accent" />}
-                  </button>
-                </li>
-              );
-            })}
-            {visible.length === 0 && <li className="px-4 py-5 text-[15px] text-muted">“{q}” 이름을 찾을 수 없어요.</li>}
-          </ul>
-        ) : (
-          chosen && (
-            <div className="flex min-h-14 items-center gap-3 rounded-xl bg-surface px-4">
-              <span className="flex-1 text-[17px] font-semibold text-accent">{chosen.name}</span>
-              <span className="text-[13px] text-muted">{tierLabel(chosen.tier)}</span>
-              <Icon name="check" size={20} strokeWidth={2.4} className="text-accent" />
-            </div>
-          )
-        )}
-        <div className="px-1 text-[13px] text-muted">
-          {open
-            ? `전체 ${members.length}명 중 ${visible.length}명 표시`
-            : `전체 ${members.length}명 · 검색창을 눌러 찾아보세요`}
+            <Icon name="search" size={16} strokeWidth={2} className="text-muted" />
+            <input
+              id="who-search"
+              ref={inputRef}
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => {
+                setOpen(true);
+                // 키보드가 올라와도 목록이 보이도록 검색창을 위로 올린다
+                setTimeout(() => inputRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
+              }}
+              onClick={() => setOpen(true)}
+              placeholder="이름 검색 (초성도 돼요)"
+              role="combobox"
+              aria-expanded={open}
+              aria-controls="who-am-i-list"
+              className="min-w-0 flex-1 bg-transparent text-[17px] text-foreground outline-none placeholder:text-muted"
+            />
+          </div>
         </div>
-        {error && <p className="px-1 text-sm text-danger">{error}</p>}
+  
+        <div className="flex flex-col gap-2 px-5 pt-6">
+          {open ? (
+            <ul
+              id="who-am-i-list"
+              role="listbox"
+              aria-label="회원 명단"
+              className="max-h-[50dvh] overflow-y-auto overscroll-contain rounded-xl bg-surface"
+            >
+              {visible.map((m) => {
+                const on = m.id === selected;
+                return (
+                  <li key={m.id} role="option" aria-selected={on} className="border-b border-separator last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => pick(m.id)}
+                      className="flex min-h-14 w-full items-center gap-3 px-4 text-left"
+                    >
+                      <span className={`flex-1 text-[17px] ${on ? "font-semibold text-accent" : "text-foreground"}`}>
+                        {m.name}
+                      </span>
+                      <span className="text-[13px] text-muted">{tierLabel(m.tier)}</span>
+                      {on && <Icon name="check" size={20} strokeWidth={2.4} className="text-accent" />}
+                    </button>
+                  </li>
+                );
+              })}
+              {visible.length === 0 && <li className="px-4 py-5 text-[15px] text-muted">“{q}” 이름을 찾을 수 없어요.</li>}
+            </ul>
+          ) : (
+            chosen && (
+              <div className="flex min-h-14 items-center gap-3 rounded-xl bg-surface px-4">
+                <span className="flex-1 text-[17px] font-semibold text-accent">{chosen.name}</span>
+                <span className="text-[13px] text-muted">{tierLabel(chosen.tier)}</span>
+                <Icon name="check" size={20} strokeWidth={2.4} className="text-accent" />
+              </div>
+            )
+          )}
+          <div className="px-1 text-[13px] text-muted">
+            {open
+              ? `전체 ${members.length}명 중 ${visible.length}명 표시`
+              : `전체 ${members.length}명 · 검색창을 눌러 찾아보세요`}
+          </div>
+          {error && <p className="px-1 text-sm text-danger">{error}</p>}
+        </div>
       </div>
 
       <BottomBar>
